@@ -1,4 +1,6 @@
-import { Link } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { Play } from "lucide-react";
 import { useState } from "react";
 import type { Channel } from "@/lib/iptv/types";
@@ -25,8 +27,7 @@ export function ChannelCard({
 
   return (
     <Link
-      to="/watch/$channelId"
-      params={{ channelId: channel.id }}
+      href={`/watch/${channel.id}`}
       className={cn(
         "group relative flex shrink-0 flex-col gap-2.5 outline-none",
         featured ? "w-56 sm:w-64" : "w-36 sm:w-44",

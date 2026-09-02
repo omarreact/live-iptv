@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { Category, Channel } from "@/lib/iptv/types";
 import { ChannelCard } from "./channel-card";
@@ -25,8 +25,7 @@ export function ChannelRow({
         </div>
         {showAll ? (
           <Link
-            to="/category/$id"
-            params={{ id: category.id }}
+            href={`/category/${category.id}`}
             className="inline-flex h-11 items-center gap-1 text-sm text-muted transition-colors duration-150 hover:text-fg"
           >
             All

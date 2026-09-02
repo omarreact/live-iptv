@@ -1,4 +1,6 @@
-import { Link } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
 import { Play } from "lucide-react";
 import { useState } from "react";
 import type { Channel } from "@/lib/iptv/types";
@@ -39,20 +41,19 @@ export function Hero({
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild size="lg">
-              <Link to="/watch/$channelId" params={{ channelId: channel.id }}>
+              <Link href={`/watch/${channel.id}`}>
                 <Play className="size-4 fill-current ml-0.5" />
                 Watch {channel.shortName}
               </Link>
             </Button>
             <Button asChild variant="secondary" size="lg">
-              <Link to="/browse">Browse the guide</Link>
+              <Link href="/browse">Browse the guide</Link>
             </Button>
           </div>
         </div>
 
         <Link
-          to="/watch/$channelId"
-          params={{ channelId: channel.id }}
+          href={`/watch/${channel.id}`}
           className="group relative block overflow-hidden rounded-xl bg-elevated shadow-[var(--shadow-border)] transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)]"
         >
           <div className="aspect-[16/10] bg-surface">

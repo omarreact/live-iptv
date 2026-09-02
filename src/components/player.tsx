@@ -1,4 +1,7 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bookmark,
   ChevronLeft,
@@ -32,7 +35,7 @@ export function Player({
   const wrapRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
   const engineRef = useRef<Destroyable | null>(null);
-  const navigate = useNavigate();
+  const router = useRouter();
   const toggleSaved = useLibrary((s) => s.toggleSaved);
   const addRecent = useLibrary((s) => s.addRecent);
   const saved = useLibrary((s) => s.saved.some((c) => c.id === channel.id));
@@ -238,14 +241,14 @@ export function Player({
       } else if (e.key === "f") {
         void toggleFs();
       } else if (e.key === "ArrowRight" && related[0]) {
-        void navigate({ to: "/watch/$channelId", params: { channelId: related[0].id } });
+        router.push(`/watch/${related[0].id}`);
       } else if (e.key === "Escape" && !document.fullscreenElement) {
-        void navigate({ to: "/" });
+        router.push("/");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [related, navigate, togglePlay, toggleMute, toggleFs]);
+  }, [related, router, togglePlay, toggleMute, toggleFs]);
 
   function onVolume(v: number) {
     const video = videoRef.current;
@@ -292,14 +295,14 @@ export function Player({
                 </Button>
                 {next ? (
                   <Button asChild>
-                    <Link to="/watch/$channelId" params={{ channelId: next.id }}>
+                    <Link href={`/watch/${next.id}`}>
                       <SkipForward className="size-4" />
                       Try next
                     </Link>
                   </Button>
                 ) : null}
                 <Button variant="ghost" asChild>
-                  <Link to="/">Back home</Link>
+                  <Link href="/">Back home</Link>
                 </Button>
               </div>
             </div>
@@ -321,7 +324,7 @@ export function Player({
             chromeVisible ? "opacity-100" : "pointer-events-none opacity-0 -translate-y-1",
           )}
         >
-          <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/" })} aria-label="Back">
+          <Button variant="ghost" size="icon" onClick={() => router.push("/")} aria-label="Back">
             <ChevronLeft className="size-5" />
           </Button>
           <div className="min-w-0 flex-1 text-center sm:text-left">
@@ -368,9 +371,7 @@ export function Player({
           <div className="ml-auto flex items-center gap-2">
             {next ? (
               <Button variant="secondary" size="sm" asChild>
-                <Link to="/watch/$channelId" params={{ channelId: next.id }}>
-                  Next
-                </Link>
+                <Link href={`/watch/${next.id}`}>Next</Link>
               </Button>
             ) : null}
             <Button variant="ghost" size="icon" onClick={() => void toggleFs()} aria-label="Fullscreen">
