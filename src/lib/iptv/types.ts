@@ -1,3 +1,16 @@
+export type Stream = {
+  id: string;
+  url: string;
+  title: string;
+  feed: string | null;
+  quality: string | null;
+  label: string | null;
+  geoBlocked: boolean;
+  not247: boolean;
+  userAgent: string | null;
+  referrer: string | null;
+};
+
 export type Channel = {
   id: string;
   name: string;
@@ -11,12 +24,17 @@ export type Channel = {
   not247: boolean;
   userAgent: string | null;
   referrer: string | null;
+  network: string | null;
+  altNames: string[];
+  website: string | null;
+  streams: Stream[];
 };
 
 export type Country = {
   code: string;
   name: string;
   count: number;
+  flag?: string;
 };
 
 export type Category = {
