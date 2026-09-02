@@ -1,12 +1,41 @@
 import { CATEGORY_META, FEATURED_NEEDLES, HOME_ROW_IDS, categoryKey } from "./meta";
 import { parseM3u } from "./parse";
-import type { Category, Channel, ChannelPage, Country, HomeData } from "./types";
+import type { Category, Channel, ChannelPage, Country, HomeData, Stream } from "./types";
 
+const API_BASE = "https://iptv-org.github.io/api";
 const PLAYLIST_URL = "https://iptv-org.github.io/iptv/index.m3u";
-const COUNTRIES_URL = "https://iptv-org.github.io/api/countries.json";
 const TTL_MS = 10 * 60 * 1000;
 
-type CountryInfo = { name: string; code: string };
+type ApiChannel = {
+  id: string;
+  name: string;
+  alt_names?: string[];
+  network?: string | null;
+  country: string;
+  categories?: string[];
+  is_nsfw?: boolean;
+  website?: string | null;
+};
+
+type ApiStream = {
+  channel: string | null;
+  feed?: string | null;
+  title: string;
+  url: string;
+  referrer?: string | null;
+  user_agent?: string | null;
+  quality?: string | null;
+  label?: string | null;
+};
+
+type ApiLogo = {
+  channel: string;
+  feed?: string | null;
+  in_use?: boolean;
+  url: string;
+};
+
+type CountryInfo = { name: string; code: string; flag?: string };
 
 type Catalog = {
   channels: Channel[];
@@ -21,6 +50,15 @@ type Catalog = {
 let cache: { at: number; data: Catalog } | null = null;
 let inflight: Promise<Catalog> | null = null;
 
+async function fetchJson<T>(path: string, timeout = 20000): Promise<T> {
+  const res = await fetch(`${API_BASE}/${path}`, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch iptv-org ${path} (${res.status})`);
+  return res.json() as Promise<T>;
+}
+
 async function fetchText(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: { accept: "*/*" },
@@ -30,52 +68,163 @@ async function fetchText(url: string): Promise<string> {
   return res.text();
 }
 
-function buildCatalog(m3u: string, countryList: CountryInfo[]): Catalog {
-  const channels = parseM3u(m3u);
+function streamIsUsable(stream: ApiStream): boolean {
+  if (!/^https?:\/\//i.test(stream.url)) return false;
+  if (/\.mpd(?:\?|#|$)/i.test(stream.url)) return false;
+  if (/youtube\.com|youtu\.be|twitch\.tv|dailymotion\.com/i.test(stream.url)) return false;
+  return true;
+}
+
+function streamFlags(stream: ApiStream) {
+  const label = stream.label ?? "";
+  return {
+    geoBlocked: /geo[- ]?blocked/i.test(label),
+    not247: /not\s*24\s*\/\s*7/i.test(label),
+  };
+}
+
+function qualityScore(quality: string | null): number {
+  const match = quality?.match(/(\d{3,4})p/i);
+  return match ? Number(match[1]) : 0;
+}
+
+function rankStreams(streams: Stream[]): Stream[] {
+  return [...streams].sort((a, b) => {
+    const aBlocked = Number(a.geoBlocked || a.not247);
+    const bBlocked = Number(b.geoBlocked || b.not247);
+    if (aBlocked !== bBlocked) return aBlocked - bBlocked;
+    return qualityScore(b.quality) - qualityScore(a.quality);
+  });
+}
+
+function chooseLogo(channelId: string, logos: ApiLogo[]): string {
+  const matches = logos.filter((logo) => logo.channel === channelId && logo.url);
+  return (matches.find((logo) => logo.in_use)?.url ?? matches[0]?.url ?? "");
+}
+
+function buildCatalog(
+  apiChannels: ApiChannel[],
+  apiStreams: ApiStream[],
+  countryList: CountryInfo[],
+  logos: ApiLogo[],
+): Catalog {
+  const streamsByChannel = new Map<string, Stream[]>();
+  for (const raw of apiStreams) {
+    if (!raw.channel || !streamIsUsable(raw)) continue;
+    const flags = streamFlags(raw);
+    const stream: Stream = {
+      id: `${raw.channel}:${raw.feed ?? "main"}:${raw.url}`,
+      url: raw.url,
+      title: raw.title || "Live stream",
+      feed: raw.feed ?? null,
+      quality: raw.quality ?? null,
+      label: raw.label ?? null,
+      geoBlocked: flags.geoBlocked,
+      not247: flags.not247,
+      userAgent: raw.user_agent ?? null,
+      referrer: raw.referrer ?? null,
+    };
+    const list = streamsByChannel.get(raw.channel);
+    if (list) list.push(stream);
+    else streamsByChannel.set(raw.channel, [stream]);
+  }
+
   const byId = new Map<string, Channel>();
   const byCategory = new Map<string, Channel[]>();
   const byCountry = new Map<string, Channel[]>();
   const countryNames = new Map<string, string>();
 
-  for (const c of countryList) {
-    countryNames.set(c.code.toUpperCase(), c.name);
-  }
+  for (const country of countryList) countryNames.set(country.code.toUpperCase(), country.name);
 
-  for (const ch of channels) {
-    if (!byId.has(ch.id)) byId.set(ch.id, ch);
-    for (const g of ch.groups) {
-      const key = categoryKey(g);
-      if (key === "xxx") continue;
-      const list = byCategory.get(key);
-      if (list) list.push(ch);
-      else byCategory.set(key, [ch]);
+  const channels: Channel[] = [];
+  for (const raw of apiChannels) {
+    if (raw.is_nsfw) continue;
+    const streams = rankStreams(streamsByChannel.get(raw.id) ?? []);
+    if (streams.length === 0) continue;
+
+    const groups = (raw.categories ?? []).map(categoryKey).filter((id) => id !== "xxx");
+    const primary = streams[0];
+    const channel: Channel = {
+      id: raw.id,
+      name: raw.name,
+      shortName: raw.name,
+      logo: chooseLogo(raw.id, logos),
+      url: primary.url,
+      groups,
+      country: raw.country?.toUpperCase() ?? null,
+      quality: primary.quality,
+      geoBlocked: primary.geoBlocked,
+      not247: primary.not247,
+      userAgent: primary.userAgent,
+      referrer: primary.referrer,
+      network: raw.network ?? null,
+      altNames: raw.alt_names ?? [],
+      website: raw.website ?? null,
+      streams,
+    };
+    channels.push(channel);
+    byId.set(channel.id, channel);
+
+    for (const group of groups) {
+      if (!CATEGORY_META[group]) continue;
+      const list = byCategory.get(group);
+      if (list) list.push(channel);
+      else byCategory.set(group, [channel]);
     }
-    if (ch.country) {
-      const list = byCountry.get(ch.country);
-      if (list) list.push(ch);
-      else byCountry.set(ch.country, [ch]);
+
+    if (channel.country) {
+      const list = byCountry.get(channel.country);
+      if (list) list.push(channel);
+      else byCountry.set(channel.country, [channel]);
     }
   }
 
   const categories: Category[] = Object.entries(CATEGORY_META)
-    .map(([id, meta]) => ({
-      id,
-      name: meta.name,
-      description: meta.description,
-      count: byCategory.get(id)?.length ?? 0,
-    }))
-    .filter((c) => c.count > 0)
+    .map(([id, meta]) => ({ id, name: meta.name, description: meta.description, count: byCategory.get(id)?.length ?? 0 }))
+    .filter((category) => category.count > 0)
     .sort((a, b) => b.count - a.count);
 
   const countries: Country[] = [...byCountry.entries()]
-    .map(([code, list]) => ({
-      code,
-      name: countryNames.get(code) ?? code,
-      count: list.length,
-    }))
-    .sort((a, b) => b.count - a.count);
+    .map(([code, list]) => ({ code, name: countryNames.get(code) ?? code, count: list.length, flag: countryList.find((c) => c.code.toUpperCase() === code)?.flag }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
   return { channels, byId, byCategory, byCountry, categories, countries, countryNames };
+}
+
+async function loadFromApi(): Promise<Catalog> {
+  const [apiChannels, apiStreams, countryList, logos] = await Promise.all([
+    fetchJson<ApiChannel[]>("channels.json"),
+    fetchJson<ApiStream[]>("streams.json"),
+    fetchJson<CountryInfo[]>("countries.json"),
+    fetchJson<ApiLogo[]>("logos.json"),
+  ]);
+  return buildCatalog(apiChannels, apiStreams, countryList, logos);
+}
+
+async function loadFallback(): Promise<Catalog> {
+  const [m3u, countries] = await Promise.all([
+    fetchText(PLAYLIST_URL),
+    fetchJson<CountryInfo[]>("countries.json"),
+  ]);
+  const parsed = parseM3u(m3u);
+  const channels: ApiChannel[] = parsed.map((channel) => ({
+    id: channel.id,
+    name: channel.shortName,
+    country: channel.country ?? "",
+    categories: channel.groups,
+    is_nsfw: false,
+  }));
+  const streams: ApiStream[] = parsed.map((channel) => ({
+    channel: channel.id,
+    title: channel.name,
+    url: channel.url,
+    quality: channel.quality,
+    referrer: channel.referrer,
+    user_agent: channel.userAgent,
+    label: channel.geoBlocked ? "Geo-blocked" : channel.not247 ? "Not 24/7" : null,
+  }));
+  const logos: ApiLogo[] = parsed.filter((channel) => channel.logo).map((channel) => ({ channel: channel.id, url: channel.logo, in_use: true }));
+  return buildCatalog(channels, streams, countries, logos);
 }
 
 export async function loadCatalog(): Promise<Catalog> {
@@ -83,14 +232,13 @@ export async function loadCatalog(): Promise<Catalog> {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const [m3u, countriesRaw] = await Promise.all([
-        fetchText(PLAYLIST_URL),
-        fetch(COUNTRIES_URL, { signal: AbortSignal.timeout(15000) }).then((r) => {
-          if (!r.ok) throw new Error("Failed to fetch countries");
-          return r.json() as Promise<CountryInfo[]>;
-        }),
-      ]);
-      const data = buildCatalog(m3u, countriesRaw);
+      let data: Catalog;
+      try {
+        data = await loadFromApi();
+      } catch (apiError) {
+        console.warn("iptv-org structured API failed; using M3U fallback", apiError);
+        data = await loadFallback();
+      }
       cache = { at: Date.now(), data };
       return data;
     } finally {
@@ -111,40 +259,16 @@ function containsWord(hay: string, needle: string): boolean {
 }
 
 function pickFeatured(channels: Channel[]): Channel[] {
-  const seenIds = new Set<string>();
-  const seenNames = new Set<string>();
+  const seen = new Set<string>();
   const out: Channel[] = [];
-  const lower = channels.map((ch) => ({ ch, n: ch.shortName.toLowerCase() }));
-
-  const take = (ch: Channel) => {
-    const name = ch.shortName.toLowerCase();
-    if (seenIds.has(ch.id) || seenNames.has(name)) return false;
-    seenIds.add(ch.id);
-    seenNames.add(name);
-    out.push(ch);
-    return true;
-  };
-
+  const searchable = channels.map((ch) => ({ ch, text: `${ch.shortName} ${ch.name} ${ch.altNames.join(" ")}`.toLowerCase() }));
   for (const needle of FEATURED_NEEDLES) {
-    const hit = lower.find(
-      ({ ch, n }) =>
-        !seenIds.has(ch.id) &&
-        !seenNames.has(ch.shortName.toLowerCase()) &&
-        !ch.geoBlocked &&
-        containsWord(n, needle) &&
-        (ch.quality === "1080p" || ch.quality === "720p" || !ch.quality),
-    );
-    if (hit) take(hit.ch);
-    if (out.length >= 12) break;
-  }
-
-  if (out.length < 8) {
-    for (const ch of channels) {
-      if (ch.geoBlocked || !ch.logo) continue;
-      if (!ch.groups.some((g) => g.toLowerCase() === "news")) continue;
-      take(ch);
-      if (out.length >= 8) break;
+    const hit = searchable.find(({ ch, text }) => !seen.has(ch.id) && !ch.geoBlocked && containsWord(text, needle));
+    if (hit) {
+      seen.add(hit.ch.id);
+      out.push(hit.ch);
     }
+    if (out.length >= 12) break;
   }
   return out;
 }
@@ -155,71 +279,33 @@ export async function getHomeData(): Promise<HomeData> {
     const meta = CATEGORY_META[id];
     const list = cat.byCategory.get(id) ?? [];
     return {
-      category: {
-        id,
-        name: meta?.name ?? id,
-        description: meta?.description ?? "",
-        count: list.length,
-      },
-      channels: list.filter((c) => !c.geoBlocked).slice(0, 18),
+      category: { id, name: meta?.name ?? id, description: meta?.description ?? "", count: list.length },
+      channels: list.filter((channel) => !channel.geoBlocked).slice(0, 18),
     };
   }).filter((row) => row.channels.length > 0);
 
-  return {
-    total: cat.channels.length,
-    countryCount: cat.countries.length,
-    featured: pickFeatured(cat.channels),
-    rows,
-  };
+  return { total: cat.channels.length, countryCount: cat.countries.length, featured: pickFeatured(cat.channels), rows };
 }
 
-export async function getBrowseData(): Promise<{
-  categories: Category[];
-  countries: Country[];
-  total: number;
-}> {
+export async function getBrowseData(): Promise<{ categories: Category[]; countries: Country[]; total: number }> {
   const cat = await loadCatalog();
-  return {
-    categories: cat.categories,
-    countries: cat.countries,
-    total: cat.channels.length,
-  };
+  return { categories: cat.categories, countries: cat.countries, total: cat.channels.length };
 }
 
-export async function getCategoryPage(
-  id: string,
-  offset = 0,
-  limit = 96,
-): Promise<ChannelPage> {
+export async function getCategoryPage(id: string, offset = 0, limit = 96): Promise<ChannelPage> {
   const cat = await loadCatalog();
   const key = categoryKey(id);
   const list = cat.byCategory.get(key) ?? [];
   const meta = CATEGORY_META[key];
-  return {
-    total: list.length,
-    offset,
-    channels: list.slice(offset, offset + limit),
-    title: meta?.name ?? id,
-    subtitle: meta?.description ?? `${list.length} live channels`,
-  };
+  return { total: list.length, offset, channels: list.slice(offset, offset + limit), title: meta?.name ?? id, subtitle: meta?.description ?? `${list.length} live channels` };
 }
 
-export async function getCountryPage(
-  code: string,
-  offset = 0,
-  limit = 96,
-): Promise<ChannelPage> {
+export async function getCountryPage(code: string, offset = 0, limit = 96): Promise<ChannelPage> {
   const cat = await loadCatalog();
   const key = code.toUpperCase();
   const list = cat.byCountry.get(key) ?? [];
   const name = cat.countryNames.get(key) ?? key;
-  return {
-    total: list.length,
-    offset,
-    channels: list.slice(offset, offset + limit),
-    title: name,
-    subtitle: `${list.length} live channels`,
-  };
+  return { total: list.length, offset, channels: list.slice(offset, offset + limit), title: name, subtitle: `${list.length} live channels` };
 }
 
 export async function searchChannels(q: string, limit = 60): Promise<Channel[]> {
@@ -229,22 +315,20 @@ export async function searchChannels(q: string, limit = 60): Promise<Channel[]> 
   const ranked: { ch: Channel; score: number }[] = [];
 
   for (const ch of cat.channels) {
-    const name = ch.shortName.toLowerCase();
-    const full = ch.name.toLowerCase();
+    const fields = [ch.shortName, ch.name, ...ch.altNames, ch.network ?? ""].map((value) => value.toLowerCase());
     const countryName = ch.country ? (cat.countryNames.get(ch.country) ?? "").toLowerCase() : "";
     let score = 0;
-    if (name === query || full === query) score = 100;
-    else if (name.startsWith(query) || full.startsWith(query)) score = 90;
-    else if (containsWord(name, query) || containsWord(full, query)) score = 80;
-    else if (name.includes(query) || full.includes(query)) score = 50;
-    else if (ch.groups.some((g) => g.toLowerCase() === query || containsWord(g.toLowerCase(), query))) score = 30;
-    else if (ch.country && ch.country.toLowerCase() === query) score = 25;
-    else if (query.length >= 3 && countryName.includes(query)) score = 20;
+    if (fields.some((value) => value === query)) score = 100;
+    else if (fields.some((value) => value.startsWith(query))) score = 90;
+    else if (fields.some((value) => containsWord(value, query))) score = 80;
+    else if (fields.some((value) => value.includes(query))) score = 50;
+    else if (ch.groups.some((group) => group === query || containsWord(group, query))) score = 30;
+    else if (ch.country?.toLowerCase() === query || countryName.includes(query)) score = 25;
     if (score > 0) ranked.push({ ch, score });
   }
 
-  ranked.sort((a, b) => b.score - a.score);
-  return ranked.slice(0, limit).map((r) => r.ch);
+  ranked.sort((a, b) => b.score - a.score || a.ch.shortName.localeCompare(b.ch.shortName));
+  return ranked.slice(0, limit).map(({ ch }) => ch);
 }
 
 export async function getChannel(id: string): Promise<Channel | null> {
@@ -254,15 +338,9 @@ export async function getChannel(id: string): Promise<Channel | null> {
 
 export async function getRelated(id: string, limit = 16): Promise<Channel[]> {
   const cat = await loadCatalog();
-  const ch = cat.byId.get(id);
-  if (!ch) return [];
-  const primary = ch.groups[0] ? categoryKey(ch.groups[0]) : "";
-  const pool = (primary ? cat.byCategory.get(primary) : null) ?? cat.channels;
-  const out: Channel[] = [];
-  for (const other of pool) {
-    if (other.id === id) continue;
-    out.push(other);
-    if (out.length >= limit) break;
-  }
-  return out;
+  const channel = cat.byId.get(id);
+  if (!channel) return [];
+  const category = channel.groups.find((group) => CATEGORY_META[group]);
+  const pool = (category ? cat.byCategory.get(category) : null) ?? cat.byCountry.get(channel.country ?? "") ?? cat.channels;
+  return pool.filter((other) => other.id !== id && !other.geoBlocked).slice(0, limit);
 }
