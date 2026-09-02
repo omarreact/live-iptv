@@ -15,9 +15,7 @@ function parseAttrs(raw: string): Record<string, string> {
   const out: Record<string, string> = {};
   const re = /([A-Za-z0-9-]+)="([^"]*)"/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(raw))) {
-    out[m[1].toLowerCase()] = m[2];
-  }
+  while ((m = re.exec(raw))) out[m[1].toLowerCase()] = m[2];
   return out;
 }
 
@@ -27,9 +25,7 @@ function splitExtinf(line: string): { attrs: string; name: string } {
   for (let i = 0; i < rest.length; i++) {
     const ch = rest[i];
     if (ch === '"') inQuote = !inQuote;
-    else if (ch === "," && !inQuote) {
-      return { attrs: rest.slice(0, i), name: rest.slice(i + 1).trim() };
-    }
+    else if (ch === "," && !inQuote) return { attrs: rest.slice(0, i), name: rest.slice(i + 1).trim() };
   }
   return { attrs: "", name: rest.trim() };
 }
@@ -39,12 +35,7 @@ function countryFromTvgId(tvgId: string): string | null {
   return m ? m[1].toUpperCase() : null;
 }
 
-function cleanName(name: string): {
-  shortName: string;
-  quality: string | null;
-  geoBlocked: boolean;
-  not247: boolean;
-} {
+function cleanName(name: string): { shortName: string; quality: string | null; geoBlocked: boolean; not247: boolean } {
   const geoBlocked = /\[geo-blocked\]/i.test(name);
   const not247 = /\[not 24\/7\]/i.test(name);
   const q = name.match(/\((\d{3,4}p)\)/i);
@@ -67,12 +58,7 @@ function isPlayableUrl(url: string): boolean {
 export function parseM3u(text: string): Channel[] {
   const lines = text.split(/\r?\n/);
   const channels: Channel[] = [];
-  let pending: {
-    name: string;
-    attrs: Record<string, string>;
-    userAgent: string | null;
-    referrer: string | null;
-  } | null = null;
+  let pending: { name: string; attrs: Record<string, string>; userAgent: string | null; referrer: string | null } | null = null;
 
   for (const raw of lines) {
     const line = raw.trim();
@@ -89,31 +75,26 @@ export function parseM3u(text: string): Channel[] {
       };
       continue;
     }
-
     if (line.startsWith("#EXTVLCOPT:http-user-agent=")) {
       if (pending) pending.userAgent = line.slice("#EXTVLCOPT:http-user-agent=".length);
       continue;
     }
-
     if (line.startsWith("#EXTVLCOPT:http-referrer=")) {
       if (pending) pending.referrer = line.slice("#EXTVLCOPT:http-referrer=".length);
       continue;
     }
-
     if (line.startsWith("#")) continue;
     if (!pending) continue;
 
     const url = line;
-    const groups = (pending.attrs["group-title"] ?? "")
-      .split(";")
-      .map((g) => g.trim())
-      .filter(Boolean);
+    const groups = (pending.attrs["group-title"] ?? "").split(";").map((g) => g.trim()).filter(Boolean);
     const nsfw = groups.some((g) => NSFW.has(g.toLowerCase()));
     if (!nsfw && isPlayableUrl(url)) {
       const { shortName, quality, geoBlocked, not247 } = cleanName(pending.name);
       const tvgId = pending.attrs["tvg-id"] ?? "";
+      const id = tvgId || hashId(url);
       channels.push({
-        id: hashId(url),
+        id,
         name: pending.name,
         shortName: shortName || pending.name,
         logo: pending.attrs["tvg-logo"] ?? "",
@@ -125,10 +106,24 @@ export function parseM3u(text: string): Channel[] {
         not247,
         userAgent: pending.userAgent,
         referrer: pending.referrer,
+        network: null,
+        altNames: [],
+        website: null,
+        streams: [{
+          id: `${id}:${url}`,
+          url,
+          title: pending.name,
+          feed: null,
+          quality,
+          label: geoBlocked ? "Geo-blocked" : not247 ? "Not 24/7" : null,
+          geoBlocked,
+          not247,
+          userAgent: pending.userAgent,
+          referrer: pending.referrer,
+        }],
       });
     }
     pending = null;
   }
-
   return channels;
 }
