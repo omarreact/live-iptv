@@ -57,4 +57,5 @@ export type ChannelPage = {
   channels: Channel[];
   title: string;
   subtitle: string;
+  categoryCounts?: Record<string, number>;
 };
