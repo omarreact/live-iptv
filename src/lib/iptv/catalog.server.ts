@@ -213,6 +213,11 @@ export async function getCountryPage(code: string, offset = 0, limit = 96, categ
   const list = categoryKeyValue && CATEGORY_META[categoryKeyValue]
     ? all.filter((channel) => channel.groups.includes(categoryKeyValue))
     : all;
+  const categoryCounts = Object.fromEntries(
+    cat.categories
+      .map((item) => [item.id, all.filter((channel) => channel.groups.includes(item.id)).length] as const)
+      .filter(([, count]) => count > 0),
+  );
   const name = cat.countryNames.get(key) ?? key;
   const title = categoryKeyValue && CATEGORY_META[categoryKeyValue]
     ? `${name} · ${CATEGORY_META[categoryKeyValue].name}`
@@ -220,7 +225,7 @@ export async function getCountryPage(code: string, offset = 0, limit = 96, categ
   const subtitle = categoryKeyValue && CATEGORY_META[categoryKeyValue]
     ? `${list.length} ${CATEGORY_META[categoryKeyValue].name.toLowerCase()} channels`
     : `${list.length} live channels`;
-  return { total: list.length, offset, channels: list.slice(offset, offset + limit), title, subtitle };
+  return { total: list.length, offset, channels: list.slice(offset, offset + limit), title, subtitle, categoryCounts };
 }
 
 export async function searchChannels(q: string, limit = 60): Promise<Channel[]> {
