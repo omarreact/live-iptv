@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ChannelGrid } from "@/components/channel-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -35,11 +35,13 @@ function CountryPage() {
   const channels = [...page.channels, ...extra];
   const remaining = page.total - channels.length;
 
-  const categories = useMemo(() => {
-    const seen = new Set<string>();
-    for (const channel of page.channels) for (const group of channel.groups) if (CATEGORY_META[group]) seen.add(group);
-    return ["all", ...[...seen].sort((a, b) => CATEGORY_META[a].name.localeCompare(CATEGORY_META[b].name))];
-  }, [page.channels]);
+  const categories = [
+    "all",
+    ...Object.entries(page.categoryCounts ?? {})
+      .filter(([id]) => Boolean(CATEGORY_META[id]))
+      .sort(([a], [b]) => CATEGORY_META[a].name.localeCompare(CATEGORY_META[b].name))
+      .map(([id]) => id),
+  ];
 
   async function selectCategory(next: string) {
     setExtra([]);
@@ -63,7 +65,7 @@ function CountryPage() {
       <div className="mt-7 flex gap-2 overflow-x-auto pb-2" role="tablist" aria-label="Country channel categories">
         {categories.map((id) => {
           const selected = (activeCategory ?? "all") === id;
-          const label = id === "all" ? "All" : CATEGORY_META[id].name;
+          const label = id === "all" ? "All" : `${CATEGORY_META[id].name} · ${(page.categoryCounts?.[id] ?? 0).toLocaleString()}`;
           return (
             <Button key={id} size="sm" variant={selected ? "default" : "secondary"} className="shrink-0" onClick={() => void selectCategory(id)} aria-selected={selected} role="tab">
               {label}
