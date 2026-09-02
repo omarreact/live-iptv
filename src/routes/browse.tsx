@@ -94,6 +94,7 @@ function Browse() {
             key={c.code}
             to="/country/$code"
             params={{ code: c.code.toLowerCase() }}
+            search={{ category: undefined }}
             className="flex h-12 items-center justify-between rounded-lg px-3 text-sm shadow-[var(--shadow-border)] transition-colors duration-150 hover:bg-elevated"
           >
             <span className="truncate">
