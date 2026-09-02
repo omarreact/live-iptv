@@ -12,8 +12,14 @@ const countrySearchSchema = z.object({
   category: z.string().optional(),
 });
 
+type CountrySearch = z.infer<typeof countrySearchSchema>;
+
+function validateCountrySearch(search: Record<string, unknown>): CountrySearch {
+  return countrySearchSchema.parse(search);
+}
+
 export const Route = createFileRoute("/country/$code")({
-  validateSearch: countrySearchSchema,
+  validateSearch: validateCountrySearch,
   loader: ({ params, location }) =>
     fetchCountry({
       data: {
