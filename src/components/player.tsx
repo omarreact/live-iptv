@@ -2,16 +2,7 @@
 
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
-  Bookmark,
-  ChevronLeft,
-  Maximize,
-  Minimize,
-  Pause,
-  Play,
-  RotateCcw,
-  SkipForward,
-  Volume2,
-  VolumeX,
+  Bookmark, ChevronLeft, Maximize, Minimize, Pause, Play, RotateCcw, SkipForward, Volume2, VolumeX,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Channel } from "@/lib/iptv/types";
@@ -32,7 +23,6 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const toggleSaved = useLibrary((s) => s.toggleSaved);
   const addRecent = useLibrary((s) => s.addRecent);
   const saved = useLibrary((s) => s.saved.some((c) => c.id === channel.id));
-
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -41,15 +31,15 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const [chromeVisible, setChromeVisible] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [streamIndex, setStreamIndex] = useState(0);
 
+  useEffect(() => { setStreamIndex(0); setRetry(0); }, [channel.id]);
   useEffect(() => { addRecent(channel); }, [channel, addRecent]);
 
   const revealChrome = useCallback(() => {
     setChromeVisible(true);
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => {
-      if (videoRef.current && !videoRef.current.paused) setChromeVisible(false);
-    }, 2800);
+    hideTimer.current = window.setTimeout(() => { if (videoRef.current && !videoRef.current.paused) setChromeVisible(false); }, 2800);
   }, []);
 
   useEffect(() => {
@@ -57,20 +47,24 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     if (!el) return;
     const video: HTMLVideoElement = el;
     let cancelled = false;
-    setError(null);
-    setStarted(false);
-    setPlaying(false);
-    const src = proxiedStreamUrl(channel);
-    const kind = streamKind(channel.url);
+    setError(null); setStarted(false); setPlaying(false);
+    const activeStream = channel.streams?.[streamIndex] ?? channel.streams?.[0] ?? {
+      id: `${channel.id}:legacy`, url: channel.url, title: channel.name, feed: null, quality: channel.quality,
+      label: null, geoBlocked: channel.geoBlocked, not247: channel.not247, userAgent: channel.userAgent, referrer: channel.referrer,
+    };
+    const activeChannel = { ...channel, url: activeStream.url, quality: activeStream.quality, geoBlocked: activeStream.geoBlocked, not247: activeStream.not247, userAgent: activeStream.userAgent, referrer: activeStream.referrer };
+    const src = proxiedStreamUrl(activeChannel);
+    const kind = streamKind(activeStream.url);
+    const hasNextStream = (channel.streams?.length ?? 0) > streamIndex + 1;
     const onPlaying = () => { setPlaying(true); setStarted(true); setError(null); };
     const onPause = () => setPlaying(false);
     const onError = () => { if (!cancelled) { setStarted(false); setError("This broadcast is offline, geo-blocked, or not reachable from here."); } };
-    video.addEventListener("playing", onPlaying);
-    video.addEventListener("pause", onPause);
-    video.addEventListener("error", onError);
-
-    function fail(message?: string) { if (!cancelled) { setStarted(false); setError(message ?? "This broadcast is offline, geo-blocked, or not reachable from here."); } }
-
+    video.addEventListener("playing", onPlaying); video.addEventListener("pause", onPause); video.addEventListener("error", onError);
+    function fail(message?: string) {
+      if (cancelled) return;
+      if (hasNextStream) { setStreamIndex((n) => n + 1); return; }
+      setStarted(false); setError(message ?? "This broadcast is offline, geo-blocked, or not reachable from here.");
+    }
     async function attachHls(onFatal?: () => void) {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
       if (native) { video.src = src; await video.play().catch(() => {}); return; }
@@ -78,26 +72,16 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       if (cancelled) return;
       if (!Hls.isSupported()) { if (onFatal) { onFatal(); return; } video.src = src; await video.play().catch(() => fail("Live playback is not supported in this browser.")); return; }
       const hls = new Hls({ enableWorker: true, lowLatencyMode: false, maxBufferLength: 30, liveSyncDurationCount: 3, fragLoadingTimeOut: 25000, manifestLoadingTimeOut: 25000 });
-      engineRef.current = hls;
-      hls.loadSource(src);
-      hls.attachMedia(video);
+      engineRef.current = hls; hls.loadSource(src); hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
       hls.on(Hls.Events.ERROR, (_e, data) => { const d = data as { fatal?: boolean }; if (!d?.fatal) return; hls.destroy(); engineRef.current = null; if (onFatal) onFatal(); else fail(); });
     }
-
     async function attachMpegTs() {
-      const mod = await import("mpegts.js");
-      const mpegts = mod.default;
-      if (cancelled) return;
+      const mod = await import("mpegts.js"); const mpegts = mod.default; if (cancelled) return;
       if (!mpegts.isSupported()) { video.src = src; await video.play().catch(() => fail("Live playback is not supported in this browser.")); return; }
       const player = mpegts.createPlayer({ type: "mpegts", isLive: true, url: src, cors: true }, { enableWorker: true, isLive: true, enableStashBuffer: false, liveBufferLatencyChasing: true, lazyLoad: false });
-      engineRef.current = player;
-      player.attachMediaElement(video);
-      player.load();
-      void Promise.resolve(player.play()).catch(() => {});
-      player.on(mpegts.Events.ERROR, () => fail());
+      engineRef.current = player; player.attachMediaElement(video); player.load(); void Promise.resolve(player.play()).catch(() => {}); player.on(mpegts.Events.ERROR, () => fail());
     }
-
     async function attach() {
       try {
         if (kind === "mp4") { video.src = src; await video.play().catch(() => {}); return; }
@@ -105,79 +89,44 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
         await attachHls(() => { void attachMpegTs(); });
       } catch { fail(); }
     }
-    void attach();
-    revealChrome();
+    void attach(); revealChrome();
     return () => {
-      cancelled = true;
-      video.removeEventListener("playing", onPlaying);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("error", onError);
+      cancelled = true; video.removeEventListener("playing", onPlaying); video.removeEventListener("pause", onPause); video.removeEventListener("error", onError);
       try { engineRef.current?.destroy(); } catch { /* ignore */ }
-      engineRef.current = null;
-      video.removeAttribute("src");
-      video.load();
+      engineRef.current = null; video.removeAttribute("src"); video.load();
     };
-  }, [channel, revealChrome, retry]);
+  }, [channel, revealChrome, retry, streamIndex]);
 
-  useEffect(() => {
-    const onFs = () => setFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
-  }, []);
-
-  const togglePlay = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) video.play().catch(() => {}); else video.pause();
-    revealChrome();
-  }, [revealChrome]);
-  const toggleMute = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = !video.muted;
-    setMuted(video.muted);
-    revealChrome();
-  }, [revealChrome]);
-  const toggleFs = useCallback(async () => {
-    const el = wrapRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) await document.exitFullscreen(); else await el.requestFullscreen().catch(() => {});
-  }, []);
+  useEffect(() => { const onFs = () => setFullscreen(Boolean(document.fullscreenElement)); document.addEventListener("fullscreenchange", onFs); return () => document.removeEventListener("fullscreenchange", onFs); }, []);
+  const togglePlay = useCallback(() => { const video = videoRef.current; if (!video) return; if (video.paused) video.play().catch(() => {}); else video.pause(); revealChrome(); }, [revealChrome]);
+  const toggleMute = useCallback(() => { const video = videoRef.current; if (!video) return; video.muted = !video.muted; setMuted(video.muted); revealChrome(); }, [revealChrome]);
+  const toggleFs = useCallback(async () => { const el = wrapRef.current; if (!el) return; if (document.fullscreenElement) await document.exitFullscreen(); else await el.requestFullscreen().catch(() => {}); }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const tag = (e.target as HTMLElement | null)?.tagName; if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (e.key === " " || e.key === "k") { e.preventDefault(); togglePlay(); }
-      else if (e.key === "m") toggleMute();
-      else if (e.key === "f") void toggleFs();
+      else if (e.key === "m") toggleMute(); else if (e.key === "f") void toggleFs();
       else if (e.key === "ArrowRight" && related[0]) navigate({ to: "/watch/$channelId", params: { channelId: related[0].id } });
       else if (e.key === "Escape" && !document.fullscreenElement) navigate({ to: "/" });
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, [related, navigate, togglePlay, toggleMute, toggleFs]);
 
-  function onVolume(v: number) {
-    const video = videoRef.current;
-    if (!video) return;
-    video.volume = v;
-    video.muted = v === 0;
-    setVolume(v);
-    setMuted(v === 0);
-  }
+  function onVolume(v: number) { const video = videoRef.current; if (!video) return; video.volume = v; video.muted = v === 0; setVolume(v); setMuted(v === 0); }
   const next = related[0];
+  const streamCount = channel.streams?.length ?? 1;
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg lg:flex-row">
       <div ref={wrapRef} className="relative flex h-[58dvh] min-h-72 flex-1 flex-col bg-bg lg:h-auto lg:min-h-dvh" onMouseMove={revealChrome} onTouchStart={revealChrome}>
         <video ref={videoRef} className="absolute inset-0 size-full bg-bg object-contain" playsInline autoPlay onClick={togglePlay} />
         {!started && !error ? <div className="absolute inset-0 flex items-center justify-center"><div className="size-10 animate-spin rounded-full border-2 border-border-strong border-t-fg" /></div> : null}
-        {error ? <div className="absolute inset-0 flex items-center justify-center p-6"><div className="max-w-md space-y-4 rounded-xl bg-elevated p-6 text-center shadow-[var(--shadow-border)]"><p className="font-display text-2xl tracking-tight">Signal lost</p><p className="text-sm text-muted">{error}</p><div className="flex flex-wrap justify-center gap-2"><Button variant="secondary" onClick={() => setRetry((n) => n + 1)}><RotateCcw className="size-4" />Retry</Button>{next ? <Button asChild><Link to="/watch/$channelId" params={{ channelId: next.id }}><SkipForward className="size-4" />Try next</Link></Button> : null}<Button variant="ghost" asChild><Link to="/">Back home</Link></Button></div></div></div> : null}
+        {error ? <div className="absolute inset-0 flex items-center justify-center p-6"><div className="max-w-md space-y-4 rounded-xl bg-elevated p-6 text-center shadow-[var(--shadow-border)]"><p className="font-display text-2xl tracking-tight">Signal lost</p><p className="text-sm text-muted">{error}</p><div className="flex flex-wrap justify-center gap-2"><Button variant="secondary" onClick={() => { setStreamIndex(0); setRetry((n) => n + 1); }}><RotateCcw className="size-4" />Retry</Button>{next ? <Button asChild><Link to="/watch/$channelId" params={{ channelId: next.id }}><SkipForward className="size-4" />Try next</Link></Button> : null}<Button variant="ghost" asChild><Link to="/">Back home</Link></Button></div></div></div> : null}
         <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-transparent to-bg/50", "transition-opacity duration-200", chromeVisible ? "opacity-100" : "opacity-0")} />
         <div className={cn("absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 p-3 sm:p-4", "transition-[opacity,transform] duration-200 ease-out", chromeVisible ? "opacity-100" : "pointer-events-none opacity-0 -translate-y-1")}>
           <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/" })} aria-label="Back"><ChevronLeft className="size-5" /></Button>
-          <div className="min-w-0 flex-1 text-center sm:text-left"><p className="truncate font-medium">{channel.shortName}</p><p className="truncate text-xs text-muted">{channel.groups.join(" · ") || "Live"}{channel.quality ? ` · ${channel.quality}` : ""}{channel.country ? ` · ${channel.country}` : ""}</p></div>
+          <div className="min-w-0 flex-1 text-center sm:text-left"><p className="truncate font-medium">{channel.shortName}</p><p className="truncate text-xs text-muted">{channel.groups.join(" · ") || "Live"}{channel.quality ? ` · ${channel.quality}` : ""}{channel.country ? ` · ${channel.country}` : ""}{streamCount > 1 ? ` · ${streamCount} streams` : ""}</p></div>
           <Button variant="ghost" size="icon" aria-label={saved ? "Remove from saved" : "Save channel"} onClick={() => toggleSaved(channel)}><Bookmark className={cn("size-5", saved && "fill-current")} /></Button>
         </div>
         <div className={cn("absolute inset-x-0 bottom-0 z-10 flex items-center gap-2 p-3 sm:gap-3 sm:p-4", "transition-[opacity,transform] duration-200 ease-out", chromeVisible ? "opacity-100" : "pointer-events-none opacity-0 translate-y-1")}>
