@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Pinflix — Live TV",
+    name: "Pinflix",
     short_name: "Pinflix",
     description: "Watch public live television from around the world.",
     start_url: "/",
