@@ -20,14 +20,17 @@ function validateCountrySearch(search: Record<string, unknown>): CountrySearch {
 
 export const Route = createFileRoute("/country/$code")({
   validateSearch: validateCountrySearch,
-  loader: ({ params, location }) =>
-    fetchCountry({
+  loader: ({ params, location }) => {
+    const search = countrySearchSchema.parse(location.search);
+
+    return fetchCountry({
       data: {
         code: params.code,
-        category: location.search.category,
+        category: search.category,
         offset: 0,
       },
-    }),
+    });
+  },
   pendingComponent: PagePending,
   component: CountryPage,
 });
