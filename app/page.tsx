@@ -1,11 +1,15 @@
 import { Hero } from "@/components/hero";
 import { ChannelRow } from "@/components/channel-row";
 import { getHomeData } from "@/lib/iptv/provider/iptv-org";
+import type { HomeData } from "@/lib/iptv/types";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const data = await getHomeData();
+  const data: HomeData = await getHomeData().catch((error: unknown) => {
+    console.error("Unable to load the Pinflix home catalog", error);
+    return { total: 0, countryCount: 0, featured: [], rows: [] };
+  });
   const featured = data.featured[0];
 
   return (
@@ -14,8 +18,10 @@ export default async function HomePage() {
         <Hero channel={featured} total={data.total} countryCount={data.countryCount} />
       ) : (
         <section className="px-4 py-16 sm:px-8">
-          <h1 className="font-display text-4xl tracking-tight">Aether</h1>
-          <p className="mt-2 text-muted">The live guide is warming up.</p>
+          <h1 className="font-display text-4xl tracking-tight">Pinflix</h1>
+          <p className="mt-2 text-muted">
+            The live guide is temporarily unavailable. Please try again shortly.
+          </p>
         </section>
       )}
 

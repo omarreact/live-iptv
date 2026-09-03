@@ -10,11 +10,11 @@ export default async function WatchPage({ params }: { params: Promise<{ channelI
   if (!channel) notFound();
 
   const related = await getRelatedChannels(channelId);
-  return <Player channel={channel} related={related} />;
+  return <Player key={channel.id} channel={channel} related={related} />;
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ channelId: string }> }) {
   const { channelId } = await params;
   const channel = await getChannelById(channelId);
-  return { title: channel ? channel.shortName : "Aether" };
+  return { title: channel?.shortName ?? "Live channel" };
 }

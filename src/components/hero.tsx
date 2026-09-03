@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Play } from "lucide-react";
 import { useState } from "react";
 import type { Channel } from "@/lib/iptv/types";
@@ -36,8 +37,8 @@ export function Hero({
             <span className="italic"> on air.</span>
           </h1>
           <p className="max-w-md text-base text-muted">
-            {total.toLocaleString()} public channels from {countryCount} countries.
-            Newsrooms, stadiums, and late-night signals — streaming now.
+            {total.toLocaleString()} public channels from {countryCount} countries. Newsrooms,
+            stadiums, and late-night signals — streaming now.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild size="lg">
@@ -58,9 +59,12 @@ export function Hero({
         >
           <div className="aspect-[16/10] bg-surface">
             {channel.logo && !broken ? (
-              <img
+              <Image
                 src={channel.logo}
                 alt=""
+                fill
+                sizes="(min-width: 1024px) 40vw, 100vw"
+                unoptimized
                 referrerPolicy="no-referrer"
                 onError={() => setBroken(true)}
                 className="size-full object-contain p-10 outline-none sm:p-14"

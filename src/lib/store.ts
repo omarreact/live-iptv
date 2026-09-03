@@ -32,6 +32,6 @@ export const useLibrary = create<LibraryState>()(
       },
       clearRecent: () => set({ recent: [] }),
     }),
-    { name: "aether-library" },
+    { name: "pinflix-library" },
   ),
 );

@@ -11,9 +11,7 @@ export function parseSortMode(raw: string | null | undefined): SortMode {
   return "default";
 }
 
-const PRIMARY_RANK = new Map(
-  PRIMARY_CATEGORY_IDS.map((id, i) => [id, i] as const),
-);
+const PRIMARY_RANK = new Map(PRIMARY_CATEGORY_IDS.map((id, i) => [id, i] as const));
 
 /** Parse resolution labels like 1080p, 720p, 4K → numeric height. */
 export function qualityScore(quality: string | null | undefined): number {
@@ -110,8 +108,7 @@ export function sortChannels(channels: Channel[], mode: SortMode = "default"): C
       return list.sort((a, b) => {
         const q = qualityScore(b.quality) - qualityScore(a.quality);
         if (q !== 0) return q;
-        const rest =
-          restrictionPenalty(a) - restrictionPenalty(b);
+        const rest = restrictionPenalty(a) - restrictionPenalty(b);
         if (rest !== 0) return rest;
         return compareByName(a, b);
       });
@@ -134,9 +131,9 @@ export function sortChannels(channels: Channel[], mode: SortMode = "default"): C
 }
 
 /** Sort countries by channel count (desc), then name. */
-export function sortCountriesByCount<
-  T extends { count: number; name: string; code: string },
->(items: T[]): T[] {
+export function sortCountriesByCount<T extends { count: number; name: string; code: string }>(
+  items: T[],
+): T[] {
   return [...items].sort(
     (a, b) => b.count - a.count || a.name.localeCompare(b.name) || a.code.localeCompare(b.code),
   );

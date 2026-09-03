@@ -54,15 +54,10 @@ export type PrimaryCategoryId = (typeof PRIMARY_CATEGORY_IDS)[number];
 /** Home rows follow the same primary order. */
 export const HOME_ROW_IDS = PRIMARY_CATEGORY_IDS;
 
-const PRIMARY_RANK = new Map(
-  PRIMARY_CATEGORY_IDS.map((id, index) => [id, index] as const),
-);
+const PRIMARY_RANK = new Map(PRIMARY_CATEGORY_IDS.map((id, index) => [id, index] as const));
 
 /** Sort category ids: primary shelves first (fixed order), then by count desc. */
-export function sortCategoryIds(
-  ids: string[],
-  counts?: Record<string, number>,
-): string[] {
+export function sortCategoryIds(ids: string[], counts?: Record<string, number>): string[] {
   return [...ids].sort((a, b) => {
     const ra = PRIMARY_RANK.get(a as PrimaryCategoryId);
     const rb = PRIMARY_RANK.get(b as PrimaryCategoryId);
@@ -103,10 +98,6 @@ export const FEATURED_NEEDLES = [
   "trt world",
   "africanews",
 ];
-
-export function categoryKey(name: string): string {
-  return name.trim().toLowerCase();
-}
 
 export function categoryLabel(id: string): string {
   return CATEGORY_META[id]?.name ?? id;

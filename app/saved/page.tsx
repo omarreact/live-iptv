@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { ChannelGrid } from "@/components/channel-card";
 import { Button } from "@/components/ui/button";
 import { useLibrary } from "@/lib/store";
@@ -10,11 +10,11 @@ export default function SavedPage() {
   const saved = useLibrary((s) => s.saved);
   const recent = useLibrary((s) => s.recent);
   const clearRecent = useLibrary((s) => s.clearRecent);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setReady(true);
-  }, []);
+  const ready = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
 
   if (!ready) {
     return (
@@ -34,7 +34,9 @@ export default function SavedPage() {
         {saved.length === 0 ? (
           <div className="rounded-xl bg-elevated px-5 py-10 text-center shadow-[var(--shadow-border)]">
             <p className="font-display text-2xl tracking-tight">Nothing saved yet</p>
-            <p className="mt-2 text-sm text-muted">Open a channel and tap the bookmark to keep it here.</p>
+            <p className="mt-2 text-sm text-muted">
+              Open a channel and tap the bookmark to keep it here.
+            </p>
             <Button asChild className="mt-5">
               <Link href="/browse">Open the guide</Link>
             </Button>

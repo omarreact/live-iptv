@@ -1,10 +1,10 @@
-# Aether — Live TV
+# Pinflix — Live TV
 
-Lightweight Next.js app for browsing and playing public IPTV streams from [iptv-org](https://github.com/iptv-org/iptv).
+Pinflix is a lightweight Next.js application for browsing and playing public IPTV streams from [iptv-org](https://github.com/iptv-org/iptv).
 
 ## Stack
 
-- **Next.js App Router** (RSC + Route Handlers)
+- **Next.js 16 App Router** (React Server Components + Route Handlers)
 - **Tailwind CSS v4**
 - **hls.js** / **mpegts.js** client player with multi-source fallback
 - **Zustand** for device-local favorites / recent only
@@ -31,7 +31,7 @@ npm run typecheck
 
 ## Deploy
 
-Vercel (or any Node 20+ host). Set optional `NEXT_PUBLIC_SITE_URL` for metadata.
+The production application is deployed on Vercel at [iptv.pincodeit.com](https://iptv.pincodeit.com). The project uses Node.js 24. Set optional `NEXT_PUBLIC_SITE_URL` when deploying under another domain.
 
 ## Legal
 

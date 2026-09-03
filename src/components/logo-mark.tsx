@@ -2,11 +2,7 @@ import { cn } from "@/lib/utils";
 
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 32 32"
-      className={cn("size-7", className)}
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 32 32" className={cn("size-7", className)} aria-hidden="true">
       <circle cx="8" cy="16" r="2.2" fill="currentColor" />
       <path
         d="M13.2 11.2a7.2 7.2 0 0 1 0 9.6"

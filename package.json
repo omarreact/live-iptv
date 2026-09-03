@@ -1,5 +1,5 @@
 {
-  "name": "live-iptv",
+  "name": "pinflix",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -8,40 +8,41 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 8080",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run build"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
-    "@tailwindcss/postcss": "^4.3.3",
-    "@tanstack/react-start": "^1.168.0",
     "@vercel/speed-insights": "^2.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "hls.js": "^1.7.1",
     "lucide-react": "^0.510.0",
     "mpegts.js": "^1.8.2",
-    "next": "^15.5.2",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "tailwind-merge": "^3.3.1",
+    "next": "16.3.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.3.3",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "@eslint/js": "^9.34.0",
+    "@eslint/js": "10.0.1",
+    "@next/eslint-plugin-next": "16.3.4",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.17.2",
-    "@types/react": "^19.1.12",
-    "@types/react-dom": "^19.1.9",
-    "eslint": "^9.34.0",
-    "eslint-config-next": "^15.5.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "eslint": "10.9.1",
     "eslint-config-prettier": "^10.1.1",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
-    "globals": "^16.3.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "prettier": "3.9.6",
     "typescript": "^5.9.2",
-    "typescript-eslint": "^8.42.0"
+    "typescript-eslint": "8.69.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": "24.x"
   }
 }

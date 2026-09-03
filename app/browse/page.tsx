@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getGuideSummary } from "@/lib/iptv/provider/iptv-org";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 function flagEmoji(code: string): string {
   const cc = code.toUpperCase();
@@ -10,7 +10,10 @@ function flagEmoji(code: string): string {
 }
 
 export default async function BrowsePage() {
-  const data = await getGuideSummary();
+  const data = await getGuideSummary().catch((error: unknown) => {
+    console.error("Unable to load the Pinflix program guide", error);
+    return { total: 0, primaryCategories: [], otherCategories: [], countries: [] };
+  });
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8">
@@ -19,7 +22,10 @@ export default async function BrowsePage() {
         Every shelf, every country.
       </h1>
       <p className="mt-3 max-w-xl text-muted">
-        {data.total.toLocaleString()} channels · browse by category or country. Public streams from{" "}
+        {data.total > 0
+          ? `${data.total.toLocaleString()} channels · browse by category or country. `
+          : "The live catalog is temporarily unavailable. Please try again shortly. "}
+        Public streams from{" "}
         <a
           href="https://github.com/iptv-org/iptv"
           className="text-fg underline decoration-border-strong underline-offset-4 hover:decoration-fg"

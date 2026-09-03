@@ -1,4 +1,11 @@
-import { CATEGORY_META, FEATURED_NEEDLES, HOME_ROW_IDS, PRIMARY_CATEGORY_IDS, sortCategoryIds } from "../meta";
+import { cache } from "react";
+import {
+  CATEGORY_META,
+  FEATURED_NEEDLES,
+  HOME_ROW_IDS,
+  PRIMARY_CATEGORY_IDS,
+  sortCategoryIds,
+} from "../meta";
 import { normalizeChannels, toUiChannel } from "../adapters/normalize";
 import { sortChannels, sortCountriesByCount, type SortMode } from "../sort";
 import type {
@@ -16,11 +23,16 @@ import type {
 
 const API_BASE = "https://iptv-org.github.io/api";
 const REVALIDATE = 3600;
+const FETCH_TIMEOUT_MS = 20_000;
+
+let catalogCache: { expiresAt: number; value: IptvCatalog } | null = null;
+let catalogInflight: Promise<IptvCatalog> | null = null;
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}/${path}`, {
     headers: { accept: "application/json" },
-    next: { revalidate: REVALIDATE, tags: ["iptv-org", `iptv-org:${path}`] },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`iptv-org ${path} failed: ${res.status} ${res.statusText}`);
@@ -38,7 +50,7 @@ export type IptvCatalog = {
   total: number;
 };
 
-export async function getIptvCatalog(): Promise<IptvCatalog> {
+async function buildIptvCatalog(): Promise<IptvCatalog> {
   const [rawChannels, rawStreams, countries, categories, logos] = await Promise.all([
     fetchJson<IptvOrgChannel[]>("channels.json"),
     fetchJson<IptvOrgStream[]>("streams.json"),
@@ -88,6 +100,20 @@ export async function getIptvCatalog(): Promise<IptvCatalog> {
     total: channels.length,
   };
 }
+
+export const getIptvCatalog = cache(async function getIptvCatalog(): Promise<IptvCatalog> {
+  if (catalogCache && catalogCache.expiresAt > Date.now()) return catalogCache.value;
+  if (catalogInflight) return catalogInflight;
+
+  catalogInflight = buildIptvCatalog();
+  try {
+    const value = await catalogInflight;
+    catalogCache = { expiresAt: Date.now() + REVALIDATE * 1_000, value };
+    return value;
+  } finally {
+    catalogInflight = null;
+  }
+});
 
 function countryNameMap(catalog: IptvCatalog): Map<string, IptvOrgCountry> {
   const map = new Map<string, IptvOrgCountry>();
@@ -174,9 +200,7 @@ export async function searchChannels(q: string, limit = 60): Promise<Channel[]> 
     if (score > 0) ranked.push({ ch, score });
   }
 
-  ranked.sort(
-    (a, b) => b.score - a.score || a.ch.shortName.localeCompare(b.ch.shortName),
-  );
+  ranked.sort((a, b) => b.score - a.score || a.ch.shortName.localeCompare(b.ch.shortName));
   return ranked.slice(0, limit).map(({ ch }) => ch);
 }
 

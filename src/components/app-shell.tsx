@@ -25,7 +25,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-8">
             <Link href="/" className="flex items-center gap-2 text-fg">
               <LogoMark className="size-6" />
-              <span className="font-display text-xl tracking-tight">Aether</span>
+              <span className="font-display text-xl tracking-tight">Pinflix</span>
             </Link>
             <nav className="hidden items-center gap-1 md:flex">
               {NAV.map((item) => {

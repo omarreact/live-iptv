@@ -55,14 +55,18 @@ export default async function CountryPage({
         {categoryName ? <span className="text-muted"> · {categoryName}</span> : null}
       </h1>
       <p className="mt-2 text-muted">
-        {channels.length.toLocaleString()} live{" "}
-        {channels.length === 1 ? "channel" : "channels"}
+        {channels.length.toLocaleString()} live {channels.length === 1 ? "channel" : "channels"}
         {categoryName ? ` in ${categoryName.toLowerCase()}` : ""}
       </p>
 
       {categoryIds.length > 0 ? (
         <div className="mt-6 flex flex-wrap gap-2">
-          <FilterChip href={href({ category: null })} active={!activeCategory} label="All" count={totalInCountry} />
+          <FilterChip
+            href={href({ category: null })}
+            active={!activeCategory}
+            label="All"
+            count={totalInCountry}
+          />
           {categoryIds.map((id) => (
             <FilterChip
               key={id}
@@ -156,6 +160,6 @@ export async function generateMetadata({
   const cat = category?.trim().toLowerCase();
   const catName = cat ? categoryLabel(cat) : null;
   return {
-    title: catName ? `${name} · ${catName} · Aether` : `${name} · Aether`,
+    title: catName ? `${name} · ${catName}` : name,
   };
 }

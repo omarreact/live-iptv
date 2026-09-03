@@ -18,17 +18,19 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/stream",
-        headers: [
-          { key: "Cache-Control", value: "no-store" },
-          { key: "Access-Control-Allow-Origin", value: "*" },
-        ],
+        headers: [{ key: "Cache-Control", value: "no-store" }],
       },
       {
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-DNS-Prefetch-Control", value: "on" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
         ],
       },
     ];

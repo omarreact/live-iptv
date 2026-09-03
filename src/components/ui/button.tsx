@@ -8,8 +8,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary:
-          "bg-accent text-accent-fg shadow-[var(--shadow-border)] hover:opacity-90",
+        primary: "bg-accent text-accent-fg shadow-[var(--shadow-border)] hover:opacity-90",
         secondary:
           "bg-elevated text-fg shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]",
         ghost: "bg-transparent text-fg hover:bg-elevated",
@@ -36,9 +35,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
 
 function Button({ className, variant, size, asChild = false, ...props }: ButtonProps) {
   const Comp = asChild ? Slot : "button";
-  return (
-    <Comp className={cn(buttonVariants({ variant, size }), className)} {...props} />
-  );
+  return <Comp className={cn(buttonVariants({ variant, size }), className)} {...props} />;
 }
 
 export { Button, buttonVariants };

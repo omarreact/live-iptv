@@ -1,11 +1,5 @@
 import { rankStreams } from "../sort";
-import type {
-  IptvOrgChannel,
-  IptvOrgStream,
-  AppChannel,
-  Channel,
-  Stream,
-} from "../types";
+import type { IptvOrgChannel, IptvOrgStream, AppChannel, Channel, Stream } from "../types";
 
 function isUsableUrl(url: string): boolean {
   return (

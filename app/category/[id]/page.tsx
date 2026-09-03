@@ -58,15 +58,12 @@ export default async function CategoryPage({
       <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">Category</p>
       <h1 className="mt-2 font-display text-4xl tracking-tight">
         {category.name}
-        {activeCountryMeta ? (
-          <span className="text-muted"> · {activeCountryMeta.name}</span>
-        ) : null}
+        {activeCountryMeta ? <span className="text-muted"> · {activeCountryMeta.name}</span> : null}
       </h1>
       <p className="mt-2 text-muted">
         {category.description}
         {" · "}
-        {channels.length.toLocaleString()}{" "}
-        {channels.length === 1 ? "channel" : "channels"}
+        {channels.length.toLocaleString()} {channels.length === 1 ? "channel" : "channels"}
         {activeCountryMeta ? ` in ${activeCountryMeta.name}` : ""}
       </p>
 
@@ -171,6 +168,6 @@ export async function generateMetadata({
   const cc = country?.trim().toUpperCase();
   const countryName = cc ? countryCounts.find((c) => c.code === cc)?.name : null;
   return {
-    title: countryName ? `${name} · ${countryName} · Aether` : `${name} · Aether`,
+    title: countryName ? `${name} · ${countryName}` : name,
   };
 }

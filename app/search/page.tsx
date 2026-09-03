@@ -32,37 +32,64 @@ function SearchPageInner() {
   const [q, setQ] = useState(initial);
   const [results, setResults] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
 
-  useEffect(() => setQ(initial), [initial]);
+  useEffect(() => {
+    const syncFromHistory = () => {
+      setQ(new URLSearchParams(window.location.search).get("q") ?? "");
+    };
+    window.addEventListener("popstate", syncFromHistory);
+    return () => window.removeEventListener("popstate", syncFromHistory);
+  }, []);
 
   useEffect(() => {
     const next = q.trim();
+    const requestId = ++seq.current;
+    let controller: AbortController | undefined;
     const handle = window.setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString());
       if (next) params.set("q", next);
       else params.delete("q");
-      router.replace(`/search?${params.toString()}`);
+      const nextUrl = params.size > 0 ? `/search?${params.toString()}` : "/search";
+      if ((searchParams.get("q") ?? "") !== next) {
+        router.replace(nextUrl, { scroll: false });
+      }
 
       if (next.length < 2) {
         setResults([]);
         setLoading(false);
+        setError(null);
         return;
       }
 
-      const id = ++seq.current;
+      controller = new AbortController();
       setLoading(true);
-      fetch(`/api/search?q=${encodeURIComponent(next)}`)
-        .then((res) => res.json() as Promise<Channel[]>)
+      setError(null);
+      fetch(`/api/search?q=${encodeURIComponent(next)}`, { signal: controller.signal })
+        .then((res) => {
+          if (!res.ok) throw new Error(`Search failed with status ${res.status}`);
+          return res.json() as Promise<Channel[]>;
+        })
         .then((rows) => {
-          if (seq.current === id) setResults(rows);
+          if (seq.current === requestId) setResults(rows);
+        })
+        .catch((requestError: unknown) => {
+          if (requestError instanceof DOMException && requestError.name === "AbortError") return;
+          if (seq.current === requestId) {
+            setResults([]);
+            setError("Search is temporarily unavailable. Please try again.");
+          }
         })
         .finally(() => {
-          if (seq.current === id) setLoading(false);
+          if (seq.current === requestId) setLoading(false);
         });
     }, 220);
 
-    return () => window.clearTimeout(handle);
+    return () => {
+      window.clearTimeout(handle);
+      controller?.abort();
+    };
   }, [q, router, searchParams]);
 
   return (
@@ -81,10 +108,16 @@ function SearchPageInner() {
         />
       </div>
       <div className="mt-8">
-        {loading ? (
+        {error ? (
+          <p className="text-sm text-live" role="alert">
+            {error}
+          </p>
+        ) : loading ? (
           <p className="text-sm text-muted">Looking through the guide…</p>
         ) : q.trim().length < 2 ? (
-          <p className="text-sm text-muted">Type at least two letters to search the live catalog.</p>
+          <p className="text-sm text-muted">
+            Type at least two letters to search the live catalog.
+          </p>
         ) : results.length === 0 ? (
           <p className="text-sm text-muted">No stations matched “{q.trim()}”.</p>
         ) : (

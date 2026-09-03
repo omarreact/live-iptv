@@ -1,13 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Play } from "lucide-react";
 import { useState } from "react";
 import type { Channel } from "@/lib/iptv/types";
 import { cn } from "@/lib/utils";
 
 function monogram(name: string): string {
-  const parts = name.replace(/[^a-zA-Z0-9 ]/g, " ").trim().split(/\s+/);
+  const parts = name
+    .replace(/[^a-zA-Z0-9 ]/g, " ")
+    .trim()
+    .split(/\s+/);
   const a = parts[0]?.[0] ?? "A";
   const b = parts[1]?.[0] ?? parts[0]?.[1] ?? "";
   return (a + b).toUpperCase();
@@ -44,9 +48,12 @@ export function ChannelCard({
         )}
       >
         {showLogo ? (
-          <img
+          <Image
             src={channel.logo}
             alt=""
+            fill
+            sizes={featured ? "(min-width: 640px) 256px, 224px" : "(min-width: 640px) 176px, 144px"}
+            unoptimized
             loading="lazy"
             referrerPolicy="no-referrer"
             onError={() => setBroken(true)}

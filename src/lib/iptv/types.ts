@@ -115,12 +115,3 @@ export type HomeData = {
   featured: Channel[];
   rows: { category: Category; channels: Channel[] }[];
 };
-
-export type ChannelPage = {
-  total: number;
-  offset: number;
-  channels: Channel[];
-  title: string;
-  subtitle: string;
-  categoryCounts?: Record<string, number>;
-};
