@@ -3,15 +3,15 @@ import { getRequest } from "@tanstack/react-start/server";
 import {
   assertSameSiteRequest,
   CrossSiteRequestError,
-} from "../auth/isolation.server.ts";
-import { assertAppDataServerOnly } from "./server-only.ts";
+} from "../auth/isolation.server";
+import { assertAppDataServerOnly } from "./server-only";
 import {
   CONNECTOR_TOKEN_HEADER,
   ConnectorType,
   type CallToolOptions,
   type CallToolResult,
   type ToolArgs,
-} from "./types.ts";
+} from "./types";
 
 assertAppDataServerOnly("app-data/client.server");
 
@@ -359,11 +359,11 @@ export {
   ConnectorType,
   GoogleDriveTools,
   CONNECTOR_TOKEN_HEADER,
-} from "./types.ts";
+} from "./types";
 export type {
   CallToolResult,
   CallToolOptions,
   ToolArgs,
   ConnectorTypeName,
-} from "./types.ts";
-export { isLoginRequired, redirectToLoginIfRequired } from "./login.ts";
+} from "./types";
+export { isLoginRequired, redirectToLoginIfRequired } from "./login";
