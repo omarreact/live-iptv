@@ -1,4 +1,4 @@
-import { CATEGORY_META, PRIMARY_CATEGORY_IDS, sortCategoryIds } from "../meta";
+import { CATEGORY_META, FEATURED_NEEDLES, HOME_ROW_IDS, PRIMARY_CATEGORY_IDS, sortCategoryIds } from "../meta";
 import { normalizeChannels, toUiChannel } from "../adapters/normalize";
 import { sortChannels, sortCountriesByCount, type SortMode } from "../sort";
 import type {
@@ -6,6 +6,7 @@ import type {
   Category,
   Channel,
   Country,
+  HomeData,
   IptvOrgCategory,
   IptvOrgChannel,
   IptvOrgCountry,
@@ -94,19 +95,96 @@ function countryNameMap(catalog: IptvCatalog): Map<string, IptvOrgCountry> {
   return map;
 }
 
-/** Country → channels, optional category filter + dynamic sort. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsWord(hay: string, needle: string): boolean {
+  if (!needle) return false;
+  if (needle.includes(" ")) return hay.includes(needle);
+  return new RegExp(`(?:^|[^a-z0-9])${escapeRe(needle)}(?:[^a-z0-9]|$)`, "i").test(hay);
+}
+
+function pickFeatured(channels: Channel[]): Channel[] {
+  const seen = new Set<string>();
+  const out: Channel[] = [];
+  const searchable = channels.map((ch) => ({
+    ch,
+    text: `${ch.shortName} ${ch.name} ${ch.altNames.join(" ")}`.toLowerCase(),
+  }));
+  for (const needle of FEATURED_NEEDLES) {
+    const hit = searchable.find(
+      ({ ch, text }) => !seen.has(ch.id) && !ch.geoBlocked && containsWord(text, needle),
+    );
+    if (hit) {
+      seen.add(hit.ch.id);
+      out.push(hit.ch);
+    }
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
+export async function getHomeData(): Promise<HomeData> {
+  const catalog = await getIptvCatalog();
+  const rows = HOME_ROW_IDS.map((id) => {
+    const meta = CATEGORY_META[id];
+    const list = catalog.byCategory.get(id) ?? [];
+    return {
+      category: {
+        id,
+        name: meta?.name ?? id,
+        description: meta?.description ?? "",
+        count: list.length,
+      },
+      channels: sortChannels(
+        list.filter((ch) => !ch.geoBlocked),
+        "default",
+      ).slice(0, 18),
+    };
+  }).filter((row) => row.channels.length > 0);
+
+  return {
+    total: catalog.total,
+    countryCount: catalog.byCountry.size,
+    featured: pickFeatured(catalog.channels),
+    rows,
+  };
+}
+
+export async function searchChannels(q: string, limit = 60): Promise<Channel[]> {
+  const query = q.trim().toLowerCase();
+  if (query.length < 2) return [];
+  const catalog = await getIptvCatalog();
+  const names = countryNameMap(catalog);
+  const ranked: { ch: Channel; score: number }[] = [];
+
+  for (const ch of catalog.channels) {
+    const fields = [ch.shortName, ch.name, ...ch.altNames, ch.network ?? ""].map((v) =>
+      v.toLowerCase(),
+    );
+    const countryName = ch.country ? (names.get(ch.country)?.name ?? "").toLowerCase() : "";
+    let score = 0;
+    if (fields.some((v) => v === query)) score = 100;
+    else if (fields.some((v) => v.startsWith(query))) score = 90;
+    else if (fields.some((v) => containsWord(v, query))) score = 80;
+    else if (fields.some((v) => v.includes(query))) score = 50;
+    else if (ch.groups.some((g) => g === query || containsWord(g, query))) score = 30;
+    else if (ch.country?.toLowerCase() === query || countryName.includes(query)) score = 25;
+    if (score > 0) ranked.push({ ch, score });
+  }
+
+  ranked.sort(
+    (a, b) => b.score - a.score || a.ch.shortName.localeCompare(b.ch.shortName),
+  );
+  return ranked.slice(0, limit).map(({ ch }) => ch);
+}
+
 export async function getChannelsByCountry(
   code: string,
   category?: string,
   sort: SortMode = "default",
-): Promise<{
-  country: IptvOrgCountry | null;
-  channels: Channel[];
-  categoryCounts: Record<string, number>;
-  categoryIds: string[];
-  totalInCountry: number;
-  sort: SortMode;
-}> {
+) {
   const catalog = await getIptvCatalog();
   const key = code.toUpperCase();
   const country = catalog.countries.find((c) => c.code.toUpperCase() === key) ?? null;
@@ -123,11 +201,10 @@ export async function getChannelsByCountry(
   const categoryIds = sortCategoryIds(Object.keys(categoryCounts), categoryCounts);
   const cat = category?.trim().toLowerCase();
   const filtered = cat ? all.filter((ch) => ch.groups.includes(cat)) : all;
-  const channels = sortChannels(filtered, sort);
 
   return {
     country,
-    channels,
+    channels: sortChannels(filtered, sort),
     categoryCounts,
     categoryIds,
     totalInCountry: all.length,
@@ -135,18 +212,11 @@ export async function getChannelsByCountry(
   };
 }
 
-/** Category → channels, optional country filter + dynamic sort. */
 export async function getChannelsByCategory(
   categoryId: string,
   countryCode?: string,
   sort: SortMode = "default",
-): Promise<{
-  category: Category | null;
-  channels: Channel[];
-  countryCounts: { code: string; name: string; flag?: string; count: number }[];
-  totalInCategory: number;
-  sort: SortMode;
-}> {
+) {
   const catalog = await getIptvCatalog();
   const key = categoryId.trim().toLowerCase();
   const meta = CATEGORY_META[key];
@@ -162,38 +232,30 @@ export async function getChannelsByCategory(
   const countryCounts = sortCountriesByCount(
     [...byCode.entries()].map(([code, count]) => {
       const info = names.get(code);
-      return {
-        code,
-        name: info?.name ?? code,
-        flag: info?.flag,
-        count,
-      };
+      return { code, name: info?.name ?? code, flag: info?.flag, count };
     }),
   );
 
   const cc = countryCode?.trim().toUpperCase();
   const filtered = cc ? all.filter((ch) => ch.country === cc) : all;
-  const channels = sortChannels(filtered, sort);
-
   const category: Category | null = meta
     ? { id: key, name: meta.name, description: meta.description, count: all.length }
     : all.length
       ? { id: key, name: key, description: "", count: all.length }
       : null;
 
-  return { category, channels, countryCounts, totalInCategory: all.length, sort };
+  return {
+    category,
+    channels: sortChannels(filtered, sort),
+    countryCounts,
+    totalInCategory: all.length,
+    sort,
+  };
 }
 
-/** Browse guide: primary shelves + remaining categories + countries. */
-export async function getGuideSummary(): Promise<{
-  total: number;
-  primaryCategories: Category[];
-  otherCategories: Category[];
-  countries: Country[];
-}> {
+export async function getGuideSummary() {
   const catalog = await getIptvCatalog();
   const names = countryNameMap(catalog);
-
   const primarySet = new Set<string>(PRIMARY_CATEGORY_IDS);
   const primaryCategories: Category[] = [];
   const otherCategories: Category[] = [];
@@ -220,7 +282,7 @@ export async function getGuideSummary(): Promise<{
   }
   otherCategories.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
-  const countries = sortCountriesByCount(
+  const countries: Country[] = sortCountriesByCount(
     [...catalog.byCountry.entries()].map(([code, list]) => ({
       code,
       name: names.get(code)?.name ?? code,
@@ -229,12 +291,7 @@ export async function getGuideSummary(): Promise<{
     })),
   );
 
-  return {
-    total: catalog.total,
-    primaryCategories,
-    otherCategories,
-    countries,
-  };
+  return { total: catalog.total, primaryCategories, otherCategories, countries };
 }
 
 export async function getChannelById(id: string): Promise<Channel | null> {
