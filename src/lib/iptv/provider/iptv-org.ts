@@ -1,5 +1,3 @@
-import "server-only";
-
 import { normalizeChannels, toUiChannel } from "../adapters/normalize";
 import type {
   AppChannel,
@@ -95,7 +93,12 @@ export async function getIptvCatalog(): Promise<IptvCatalog> {
 export async function getChannelsByCountry(
   code: string,
   category?: string,
-): Promise<{ country: IptvOrgCountry | null; channels: Channel[]; categoryCounts: Record<string, number> }> {
+): Promise<{
+  country: IptvOrgCountry | null;
+  channels: Channel[];
+  categoryCounts: Record<string, number>;
+  totalInCountry: number;
+}> {
   const catalog = await getIptvCatalog();
   const key = code.toUpperCase();
   const country = catalog.countries.find((c) => c.code.toUpperCase() === key) ?? null;
@@ -111,7 +114,7 @@ export async function getChannelsByCountry(
   const cat = category?.trim().toLowerCase();
   const channels = cat ? all.filter((ch) => ch.groups.includes(cat)) : all;
 
-  return { country, channels, categoryCounts };
+  return { country, channels, categoryCounts, totalInCountry: all.length };
 }
 
 export async function getChannelById(id: string): Promise<Channel | null> {
