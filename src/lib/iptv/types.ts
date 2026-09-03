@@ -1,3 +1,68 @@
+/** Raw shapes from https://iptv-org.github.io/api */
+
+export type IptvOrgCategory = {
+  id: string;
+  name: string;
+  description?: string;
+};
+
+export type IptvOrgCountry = {
+  name: string;
+  code: string;
+  languages?: string[];
+  flag?: string;
+};
+
+export type IptvOrgStream = {
+  channel: string | null;
+  feed?: string | null;
+  title?: string;
+  url: string;
+  quality?: string | null;
+  label?: string | null;
+  referrer?: string | null;
+  user_agent?: string | null;
+  timeshift?: string | null;
+  http_referrer?: string | null;
+};
+
+export type IptvOrgChannel = {
+  id: string;
+  name: string;
+  alt_names?: string[];
+  network?: string | null;
+  owners?: string[];
+  country: string;
+  subdivision?: string | null;
+  city?: string | null;
+  broadcast_area?: string[];
+  languages?: string[];
+  categories?: string[];
+  is_nsfw?: boolean;
+  launched?: string | null;
+  closed?: string | null;
+  replaced_by?: string | null;
+  website?: string | null;
+  logo?: string;
+  native_name?: string | null;
+};
+
+export type IptvOrgLogo = {
+  channel: string;
+  feed?: string | null;
+  url: string;
+  width?: number;
+  height?: number;
+  format?: string | null;
+  in_use?: boolean;
+};
+
+/** Channel from iptv-org with its streams attached (server normalize step). */
+export type AppChannel = IptvOrgChannel & {
+  streams: IptvOrgStream[];
+};
+
+/** UI / player channel shape used across the app. */
 export type Stream = {
   id: string;
   url: string;
