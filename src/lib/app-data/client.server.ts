@@ -211,7 +211,9 @@ function tokenIdentityKey(token: string): string {
             .digest("base64url");
         }
       }
-    } catch {}
+    } catch {
+      // Invalid JWT payload; fall back to hashing the opaque token below.
+    }
   }
   return createHash("sha256").update(token).digest("base64url");
 }
