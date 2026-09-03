@@ -1,4 +1,4 @@
-import type { CallToolResult } from "./types.ts";
+import type { CallToolResult } from "./types";
 
 export function isLoginRequired(result: CallToolResult): boolean {
   return result.ok === false && result.loginRequired === true;
