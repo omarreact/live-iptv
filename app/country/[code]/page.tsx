@@ -19,7 +19,10 @@ export default async function CountryPage({
 }) {
   const { code } = await params;
   const { category } = await searchParams;
-  const { country, channels, categoryCounts } = await getChannelsByCountry(code, category);
+  const { country, channels, categoryCounts, totalInCountry } = await getChannelsByCountry(
+    code,
+    category,
+  );
 
   if (!country && channels.length === 0) notFound();
 
@@ -42,9 +45,7 @@ export default async function CountryPage({
       </p>
       <h1 className="mt-2 font-display text-4xl tracking-tight">
         {title}
-        {categoryLabel ? (
-          <span className="text-muted"> · {categoryLabel}</span>
-        ) : null}
+        {categoryLabel ? <span className="text-muted"> · {categoryLabel}</span> : null}
       </h1>
       <p className="mt-2 text-muted">
         {channels.length.toLocaleString()} live{" "}
@@ -58,7 +59,7 @@ export default async function CountryPage({
             href={`/country/${code.toLowerCase()}`}
             active={!activeCategory}
             label="All"
-            count={Object.values(categoryCounts).reduce((a, b) => a + b, 0) > 0 ? undefined : undefined}
+            count={totalInCountry}
           />
           {filterKeys.map((id) => (
             <CategoryChip
