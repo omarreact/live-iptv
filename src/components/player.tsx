@@ -1,6 +1,7 @@
 "use client";
 
-import { Link, useNavigate } from "@tanstack/react-router";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bookmark, ChevronLeft, Maximize, Minimize, Pause, Play, RotateCcw, SkipForward, Volume2, VolumeX,
 } from "lucide-react";
@@ -19,7 +20,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const wrapRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
   const engineRef = useRef<Destroyable | null>(null);
-  const navigate = useNavigate();
+  const router = useRouter();
   const toggleSaved = useLibrary((s) => s.toggleSaved);
   const addRecent = useLibrary((s) => s.addRecent);
   const saved = useLibrary((s) => s.saved.some((c) => c.id === channel.id));
@@ -107,11 +108,11 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       const tag = (e.target as HTMLElement | null)?.tagName; if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (e.key === " " || e.key === "k") { e.preventDefault(); togglePlay(); }
       else if (e.key === "m") toggleMute(); else if (e.key === "f") void toggleFs();
-      else if (e.key === "ArrowRight" && related[0]) navigate({ to: "/watch/$channelId", params: { channelId: related[0].id } });
-      else if (e.key === "Escape" && !document.fullscreenElement) navigate({ to: "/" });
+      else if (e.key === "ArrowRight" && related[0]) router.push(`/watch/${related[0].id}`);
+      else if (e.key === "Escape" && !document.fullscreenElement) router.push("/");
     };
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
-  }, [related, navigate, togglePlay, toggleMute, toggleFs]);
+  }, [related, router, togglePlay, toggleMute, toggleFs]);
 
   function onVolume(v: number) { const video = videoRef.current; if (!video) return; video.volume = v; video.muted = v === 0; setVolume(v); setMuted(v === 0); }
   const next = related[0];
@@ -122,10 +123,10 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       <div ref={wrapRef} className="relative flex h-[58dvh] min-h-72 flex-1 flex-col bg-bg lg:h-auto lg:min-h-dvh" onMouseMove={revealChrome} onTouchStart={revealChrome}>
         <video ref={videoRef} className="absolute inset-0 size-full bg-bg object-contain" playsInline autoPlay onClick={togglePlay} />
         {!started && !error ? <div className="absolute inset-0 flex items-center justify-center"><div className="size-10 animate-spin rounded-full border-2 border-border-strong border-t-fg" /></div> : null}
-        {error ? <div className="absolute inset-0 flex items-center justify-center p-6"><div className="max-w-md space-y-4 rounded-xl bg-elevated p-6 text-center shadow-[var(--shadow-border)]"><p className="font-display text-2xl tracking-tight">Signal lost</p><p className="text-sm text-muted">{error}</p><div className="flex flex-wrap justify-center gap-2"><Button variant="secondary" onClick={() => { setStreamIndex(0); setRetry((n) => n + 1); }}><RotateCcw className="size-4" />Retry</Button>{next ? <Button asChild><Link to="/watch/$channelId" params={{ channelId: next.id }}><SkipForward className="size-4" />Try next</Link></Button> : null}<Button variant="ghost" asChild><Link to="/">Back home</Link></Button></div></div></div> : null}
+        {error ? <div className="absolute inset-0 flex items-center justify-center p-6"><div className="max-w-md space-y-4 rounded-xl bg-elevated p-6 text-center shadow-[var(--shadow-border)]"><p className="font-display text-2xl tracking-tight">Signal lost</p><p className="text-sm text-muted">{error}</p><div className="flex flex-wrap justify-center gap-2"><Button variant="secondary" onClick={() => { setStreamIndex(0); setRetry((n) => n + 1); }}><RotateCcw className="size-4" />Retry</Button>{next ? <Button asChild><Link href={`/watch/${next.id}`}><SkipForward className="size-4" />Try next</Link></Button> : null}<Button variant="ghost" asChild><Link href="/">Back home</Link></Button></div></div></div> : null}
         <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-transparent to-bg/50", "transition-opacity duration-200", chromeVisible ? "opacity-100" : "opacity-0")} />
         <div className={cn("absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 p-3 sm:p-4", "transition-[opacity,transform] duration-200 ease-out", chromeVisible ? "opacity-100" : "pointer-events-none opacity-0 -translate-y-1")}>
-          <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/" })} aria-label="Back"><ChevronLeft className="size-5" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => router.push("/")} aria-label="Back"><ChevronLeft className="size-5" /></Button>
           <div className="min-w-0 flex-1 text-center sm:text-left"><p className="truncate font-medium">{channel.shortName}</p><p className="truncate text-xs text-muted">{channel.groups.join(" · ") || "Live"}{channel.quality ? ` · ${channel.quality}` : ""}{channel.country ? ` · ${channel.country}` : ""}{streamCount > 1 ? ` · ${streamCount} streams` : ""}</p></div>
           <Button variant="ghost" size="icon" aria-label={saved ? "Remove from saved" : "Save channel"} onClick={() => toggleSaved(channel)}><Bookmark className={cn("size-5", saved && "fill-current")} /></Button>
         </div>
@@ -133,7 +134,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           <Button variant="ghost" size="icon" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>{playing ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current ml-0.5" />}</Button>
           <Button variant="ghost" size="icon" onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"}>{muted || volume === 0 ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}</Button>
           <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(e) => onVolume(Number(e.target.value))} className="hidden h-1 w-24 cursor-pointer accent-accent sm:block" aria-label="Volume" />
-          <div className="ml-auto flex items-center gap-2">{next ? <Button variant="secondary" size="sm" asChild><Link to="/watch/$channelId" params={{ channelId: next.id }}>Next</Link></Button> : null}<Button variant="ghost" size="icon" onClick={() => void toggleFs()} aria-label="Fullscreen">{fullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}</Button></div>
+          <div className="ml-auto flex items-center gap-2">{next ? <Button variant="secondary" size="sm" asChild><Link href={`/watch/${next.id}`}>Next</Link></Button> : null}<Button variant="ghost" size="icon" onClick={() => void toggleFs()} aria-label="Fullscreen">{fullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}</Button></div>
         </div>
       </div>
       <aside className="border-t border-border bg-surface lg:h-dvh lg:w-[320px] lg:overflow-y-auto lg:border-l lg:border-t-0"><div className="px-4 py-4 sm:px-5"><p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">Up next</p><h2 className="mt-1 font-display text-2xl tracking-tight">Same shelf</h2></div><div className="hide-scrollbar flex gap-3 overflow-x-auto px-4 pb-6 lg:flex-col lg:overflow-x-visible">{related.map((ch) => <ChannelCard key={ch.id} channel={ch} className="w-40 lg:w-full" />)}</div></aside>
