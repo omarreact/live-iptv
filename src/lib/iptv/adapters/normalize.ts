@@ -1,3 +1,4 @@
+import { rankStreams } from "../sort";
 import type {
   IptvOrgChannel,
   IptvOrgStream,
@@ -12,11 +13,6 @@ function isUsableUrl(url: string): boolean {
     !/\.mpd(?:\?|#|$)/i.test(url) &&
     !/youtube\.com|youtu\.be|twitch\.tv|dailymotion\.com/i.test(url)
   );
-}
-
-function qualityScore(quality: string | null | undefined): number {
-  const match = quality?.match(/(\d{3,4})p/i);
-  return match ? Number(match[1]) : 0;
 }
 
 /**
@@ -63,16 +59,11 @@ export function toUiStream(raw: IptvOrgStream, channelId: string): Stream {
   };
 }
 
-/** Map AppChannel → existing UI Channel used by cards / player. */
+/** Map AppChannel → UI Channel; streams ranked dynamically for player fallback. */
 export function toUiChannel(app: AppChannel, logoUrl = ""): Channel {
-  const streams = [...app.streams]
-    .map((s) => toUiStream(s, app.id))
-    .sort((a, b) => {
-      const blocked = Number(a.geoBlocked || a.not247) - Number(b.geoBlocked || b.not247);
-      return blocked || qualityScore(b.quality) - qualityScore(a.quality);
-    });
-
+  const streams = rankStreams(app.streams.map((s) => toUiStream(s, app.id)));
   const primary = streams[0];
+
   return {
     id: app.id,
     name: app.name,
