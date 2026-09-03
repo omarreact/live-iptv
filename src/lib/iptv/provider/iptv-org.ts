@@ -1,5 +1,6 @@
 import { CATEGORY_META, PRIMARY_CATEGORY_IDS, sortCategoryIds } from "../meta";
 import { normalizeChannels, toUiChannel } from "../adapters/normalize";
+import { sortChannels, sortCountriesByCount, type SortMode } from "../sort";
 import type {
   AppChannel,
   Category,
@@ -93,16 +94,18 @@ function countryNameMap(catalog: IptvCatalog): Map<string, IptvOrgCountry> {
   return map;
 }
 
-/** Country → channels, optional category filter. Category chips ordered primary-first. */
+/** Country → channels, optional category filter + dynamic sort. */
 export async function getChannelsByCountry(
   code: string,
   category?: string,
+  sort: SortMode = "default",
 ): Promise<{
   country: IptvOrgCountry | null;
   channels: Channel[];
   categoryCounts: Record<string, number>;
   categoryIds: string[];
   totalInCountry: number;
+  sort: SortMode;
 }> {
   const catalog = await getIptvCatalog();
   const key = code.toUpperCase();
@@ -119,20 +122,30 @@ export async function getChannelsByCountry(
 
   const categoryIds = sortCategoryIds(Object.keys(categoryCounts), categoryCounts);
   const cat = category?.trim().toLowerCase();
-  const channels = cat ? all.filter((ch) => ch.groups.includes(cat)) : all;
+  const filtered = cat ? all.filter((ch) => ch.groups.includes(cat)) : all;
+  const channels = sortChannels(filtered, sort);
 
-  return { country, channels, categoryCounts, categoryIds, totalInCountry: all.length };
+  return {
+    country,
+    channels,
+    categoryCounts,
+    categoryIds,
+    totalInCountry: all.length,
+    sort,
+  };
 }
 
-/** Category → channels, optional country filter. Country chips by count. */
+/** Category → channels, optional country filter + dynamic sort. */
 export async function getChannelsByCategory(
   categoryId: string,
   countryCode?: string,
+  sort: SortMode = "default",
 ): Promise<{
   category: Category | null;
   channels: Channel[];
   countryCounts: { code: string; name: string; flag?: string; count: number }[];
   totalInCategory: number;
+  sort: SortMode;
 }> {
   const catalog = await getIptvCatalog();
   const key = categoryId.trim().toLowerCase();
@@ -146,8 +159,8 @@ export async function getChannelsByCategory(
     byCode.set(ch.country, (byCode.get(ch.country) ?? 0) + 1);
   }
 
-  const countryCounts = [...byCode.entries()]
-    .map(([code, count]) => {
+  const countryCounts = sortCountriesByCount(
+    [...byCode.entries()].map(([code, count]) => {
       const info = names.get(code);
       return {
         code,
@@ -155,11 +168,12 @@ export async function getChannelsByCategory(
         flag: info?.flag,
         count,
       };
-    })
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    }),
+  );
 
   const cc = countryCode?.trim().toUpperCase();
-  const channels = cc ? all.filter((ch) => ch.country === cc) : all;
+  const filtered = cc ? all.filter((ch) => ch.country === cc) : all;
+  const channels = sortChannels(filtered, sort);
 
   const category: Category | null = meta
     ? { id: key, name: meta.name, description: meta.description, count: all.length }
@@ -167,7 +181,7 @@ export async function getChannelsByCategory(
       ? { id: key, name: key, description: "", count: all.length }
       : null;
 
-  return { category, channels, countryCounts, totalInCategory: all.length };
+  return { category, channels, countryCounts, totalInCategory: all.length, sort };
 }
 
 /** Browse guide: primary shelves + remaining categories + countries. */
@@ -206,14 +220,14 @@ export async function getGuideSummary(): Promise<{
   }
   otherCategories.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
-  const countries: Country[] = [...catalog.byCountry.entries()]
-    .map(([code, list]) => ({
+  const countries = sortCountriesByCount(
+    [...catalog.byCountry.entries()].map(([code, list]) => ({
       code,
       name: names.get(code)?.name ?? code,
       count: list.length,
       flag: names.get(code)?.flag,
-    }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    })),
+  );
 
   return {
     total: catalog.total,
@@ -237,5 +251,8 @@ export async function getRelatedChannels(id: string, limit = 16): Promise<Channe
     (category ? catalog.byCategory.get(category) : null) ??
     (channel.country ? catalog.byCountry.get(channel.country) : null) ??
     catalog.channels;
-  return pool.filter((other) => other.id !== id && !other.geoBlocked).slice(0, limit);
+  return sortChannels(
+    pool.filter((other) => other.id !== id && !other.geoBlocked),
+    "default",
+  ).slice(0, limit);
 }
