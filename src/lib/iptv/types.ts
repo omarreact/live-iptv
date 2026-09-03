@@ -95,6 +95,24 @@ export type Channel = {
   streams: Stream[];
 };
 
+/** Compact channel shape safe to serialize into lists and browser storage. */
+export type ChannelPreview = Pick<
+  Channel,
+  "id" | "shortName" | "logo" | "groups" | "country" | "quality" | "geoBlocked"
+>;
+
+export function toChannelPreview(channel: Channel): ChannelPreview {
+  return {
+    id: channel.id,
+    shortName: channel.shortName,
+    logo: channel.logo,
+    groups: channel.groups,
+    country: channel.country,
+    quality: channel.quality,
+    geoBlocked: channel.geoBlocked,
+  };
+}
+
 export type Country = {
   code: string;
   name: string;
@@ -112,6 +130,6 @@ export type Category = {
 export type HomeData = {
   total: number;
   countryCount: number;
-  featured: Channel[];
-  rows: { category: Category; channels: Channel[] }[];
+  featured: ChannelPreview[];
+  rows: { category: Category; channels: ChannelPreview[] }[];
 };

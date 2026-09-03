@@ -1,13 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Channel } from "@/lib/iptv/types";
+import type { ChannelPreview } from "@/lib/iptv/types";
 
 type LibraryState = {
-  saved: Channel[];
-  recent: Channel[];
-  toggleSaved: (channel: Channel) => void;
+  saved: ChannelPreview[];
+  recent: ChannelPreview[];
+  toggleSaved: (channel: ChannelPreview) => void;
   isSaved: (id: string) => boolean;
-  addRecent: (channel: Channel) => void;
+  addRecent: (channel: ChannelPreview) => void;
   clearRecent: () => void;
 };
 

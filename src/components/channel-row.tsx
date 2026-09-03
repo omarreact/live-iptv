@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import type { Category, Channel } from "@/lib/iptv/types";
+import type { Category, ChannelPreview } from "@/lib/iptv/types";
 import { ChannelCard } from "./channel-card";
 
 export function ChannelRow({
@@ -9,7 +9,7 @@ export function ChannelRow({
   showAll = true,
 }: {
   category: Category;
-  channels: Channel[];
+  channels: ChannelPreview[];
   showAll?: boolean;
 }) {
   if (channels.length === 0) return null;

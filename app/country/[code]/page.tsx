@@ -19,13 +19,22 @@ export default async function CountryPage({
   searchParams,
 }: {
   params: Promise<{ code: string }>;
-  searchParams: Promise<{ category?: string; sort?: string }>;
+  searchParams: Promise<{ category?: string; sort?: string; page?: string }>;
 }) {
   const { code } = await params;
   const sp = await searchParams;
   const sort = parseSortMode(sp.sort);
-  const { country, channels, categoryCounts, categoryIds, totalInCountry } =
-    await getChannelsByCountry(code, sp.category, sort);
+  const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+  const {
+    country,
+    channels,
+    categoryCounts,
+    categoryIds,
+    totalInCountry,
+    totalFiltered,
+    totalPages,
+    page,
+  } = await getChannelsByCountry(code, sp.category, sort, requestedPage);
 
   if (!country && channels.length === 0) notFound();
 
@@ -34,12 +43,13 @@ export default async function CountryPage({
   const categoryName = activeCategory ? categoryLabel(activeCategory) : null;
   const base = `/country/${code.toLowerCase()}`;
 
-  function href(next: { category?: string | null; sort?: SortMode }) {
+  function href(next: { category?: string | null; sort?: SortMode; page?: number }) {
     const p = new URLSearchParams();
     const cat = next.category === undefined ? activeCategory : next.category;
     const s = next.sort ?? sort;
     if (cat) p.set("category", cat);
     if (s !== "default") p.set("sort", s);
+    if (next.page && next.page > 1) p.set("page", String(next.page));
     const q = p.toString();
     return q ? `${base}?${q}` : base;
   }
@@ -55,7 +65,7 @@ export default async function CountryPage({
         {categoryName ? <span className="text-muted"> · {categoryName}</span> : null}
       </h1>
       <p className="mt-2 text-muted">
-        {channels.length.toLocaleString()} live {channels.length === 1 ? "channel" : "channels"}
+        {totalFiltered.toLocaleString()} live {totalFiltered === 1 ? "channel" : "channels"}
         {categoryName ? ` in ${categoryName.toLowerCase()}` : ""}
       </p>
 
@@ -98,6 +108,28 @@ export default async function CountryPage({
           <p className="text-muted">No live channels for this filter right now.</p>
         )}
       </div>
+
+      {totalPages > 1 ? (
+        <nav className="mt-8 flex items-center justify-between gap-4" aria-label="Channel pages">
+          {page > 1 ? (
+            <Button variant="secondary" asChild>
+              <Link href={href({ page: page - 1 })}>Previous</Link>
+            </Button>
+          ) : (
+            <span />
+          )}
+          <span className="text-sm tabular-nums text-muted">
+            Page {page.toLocaleString()} of {totalPages.toLocaleString()}
+          </span>
+          {page < totalPages ? (
+            <Button variant="secondary" asChild>
+              <Link href={href({ page: page + 1 })}>Next</Link>
+            </Button>
+          ) : (
+            <span />
+          )}
+        </nav>
+      ) : null}
 
       <div className="mt-8 flex flex-wrap gap-3">
         <Button variant="ghost" asChild>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Play } from "lucide-react";
 import { useState } from "react";
-import type { Channel } from "@/lib/iptv/types";
+import type { ChannelPreview } from "@/lib/iptv/types";
 import { cn } from "@/lib/utils";
 
 function monogram(name: string): string {
@@ -22,7 +22,7 @@ export function ChannelCard({
   featured = false,
   className,
 }: {
-  channel: Channel;
+  channel: ChannelPreview;
   featured?: boolean;
   className?: string;
 }) {
@@ -96,7 +96,7 @@ export function ChannelCard({
   );
 }
 
-export function ChannelGrid({ channels }: { channels: Channel[] }) {
+export function ChannelGrid({ channels }: { channels: ChannelPreview[] }) {
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {channels.map((ch) => (

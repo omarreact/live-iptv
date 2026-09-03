@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Play } from "lucide-react";
 import { useState } from "react";
-import type { Channel } from "@/lib/iptv/types";
+import type { ChannelPreview } from "@/lib/iptv/types";
 import { Button } from "./ui/button";
 
 export function Hero({
@@ -12,7 +12,7 @@ export function Hero({
   total,
   countryCount,
 }: {
-  channel: Channel;
+  channel: ChannelPreview;
   total: number;
   countryCount: number;
 }) {

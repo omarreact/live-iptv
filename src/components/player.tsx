@@ -14,8 +14,8 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Channel } from "@/lib/iptv/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toChannelPreview, type Channel, type ChannelPreview } from "@/lib/iptv/types";
 import { proxiedStreamUrl, streamKind } from "@/lib/iptv/stream";
 import { useLibrary } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,8 @@ import { Button } from "./ui/button";
 
 type Destroyable = { destroy: () => void };
 
-export function Player({ channel, related }: { channel: Channel; related: Channel[] }) {
+export function Player({ channel, related }: { channel: Channel; related: ChannelPreview[] }) {
+  const channelPreview = useMemo(() => toChannelPreview(channel), [channel]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
@@ -44,8 +45,8 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const [streamIndex, setStreamIndex] = useState(0);
 
   useEffect(() => {
-    addRecent(channel);
-  }, [channel, addRecent]);
+    addRecent(channelPreview);
+  }, [channelPreview, addRecent]);
 
   const revealChrome = useCallback(() => {
     setChromeVisible(true);
@@ -348,7 +349,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
             variant="ghost"
             size="icon"
             aria-label={saved ? "Remove from saved" : "Save channel"}
-            onClick={() => toggleSaved(channel)}
+            onClick={() => toggleSaved(channelPreview)}
           >
             <Bookmark className={cn("size-5", saved && "fill-current")} />
           </Button>

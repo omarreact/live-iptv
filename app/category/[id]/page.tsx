@@ -24,16 +24,14 @@ export default async function CategoryPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ country?: string; sort?: string }>;
+  searchParams: Promise<{ country?: string; sort?: string; page?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
   const sort = parseSortMode(sp.sort);
-  const { category, channels, countryCounts, totalInCategory } = await getChannelsByCategory(
-    id,
-    sp.country,
-    sort,
-  );
+  const requestedPage = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
+  const { category, channels, countryCounts, totalInCategory, totalFiltered, totalPages, page } =
+    await getChannelsByCategory(id, sp.country, sort, requestedPage);
 
   if (!category) notFound();
 
@@ -43,12 +41,13 @@ export default async function CategoryPage({
     : null;
   const base = `/category/${category.id}`;
 
-  function href(next: { country?: string | null; sort?: SortMode }) {
+  function href(next: { country?: string | null; sort?: SortMode; page?: number }) {
     const p = new URLSearchParams();
     const cc = next.country === undefined ? activeCountry : next.country;
     const s = next.sort ?? sort;
     if (cc) p.set("country", String(cc).toLowerCase());
     if (s !== "default") p.set("sort", s);
+    if (next.page && next.page > 1) p.set("page", String(next.page));
     const q = p.toString();
     return q ? `${base}?${q}` : base;
   }
@@ -63,7 +62,7 @@ export default async function CategoryPage({
       <p className="mt-2 text-muted">
         {category.description}
         {" · "}
-        {channels.length.toLocaleString()} {channels.length === 1 ? "channel" : "channels"}
+        {totalFiltered.toLocaleString()} {totalFiltered === 1 ? "channel" : "channels"}
         {activeCountryMeta ? ` in ${activeCountryMeta.name}` : ""}
       </p>
 
@@ -106,6 +105,28 @@ export default async function CategoryPage({
           <p className="text-muted">No channels for this filter yet.</p>
         )}
       </div>
+
+      {totalPages > 1 ? (
+        <nav className="mt-8 flex items-center justify-between gap-4" aria-label="Channel pages">
+          {page > 1 ? (
+            <Button variant="secondary" asChild>
+              <Link href={href({ page: page - 1 })}>Previous</Link>
+            </Button>
+          ) : (
+            <span />
+          )}
+          <span className="text-sm tabular-nums text-muted">
+            Page {page.toLocaleString()} of {totalPages.toLocaleString()}
+          </span>
+          {page < totalPages ? (
+            <Button variant="secondary" asChild>
+              <Link href={href({ page: page + 1 })}>Next</Link>
+            </Button>
+          ) : (
+            <span />
+          )}
+        </nav>
+      ) : null}
 
       <div className="mt-8 flex flex-wrap gap-3">
         <Button variant="ghost" asChild>

@@ -5,7 +5,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChannelGrid } from "@/components/channel-card";
 import { Input } from "@/components/ui/input";
-import type { Channel } from "@/lib/iptv/types";
+import type { ChannelPreview } from "@/lib/iptv/types";
 
 export default function SearchPage() {
   return (
@@ -30,7 +30,7 @@ function SearchPageInner() {
   const searchParams = useSearchParams();
   const initial = searchParams.get("q") ?? "";
   const [q, setQ] = useState(initial);
-  const [results, setResults] = useState<Channel[]>([]);
+  const [results, setResults] = useState<ChannelPreview[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
@@ -69,7 +69,7 @@ function SearchPageInner() {
       fetch(`/api/search?q=${encodeURIComponent(next)}`, { signal: controller.signal })
         .then((res) => {
           if (!res.ok) throw new Error(`Search failed with status ${res.status}`);
-          return res.json() as Promise<Channel[]>;
+          return res.json() as Promise<ChannelPreview[]>;
         })
         .then((rows) => {
           if (seq.current === requestId) setResults(rows);
