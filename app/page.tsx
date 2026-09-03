@@ -1,6 +1,8 @@
 import { Hero } from "@/components/hero";
 import { ChannelRow } from "@/components/channel-row";
-import { getHomeData } from "@/lib/iptv/catalog.server";
+import { getHomeData } from "@/lib/iptv/provider/iptv-org";
+
+export const revalidate = 3600;
 
 export default async function HomePage() {
   const data = await getHomeData();

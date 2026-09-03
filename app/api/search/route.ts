@@ -1,8 +1,16 @@
-import { searchChannels } from "@/lib/iptv/catalog.server";
+import { searchChannels } from "@/lib/iptv/provider/iptv-org";
+
+export const revalidate = 3600;
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q") ?? "";
+  const q = new URL(request.url).searchParams.get("q") ?? "";
+  if (q.trim().length < 2) {
+    return Response.json([], {
+      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
+    });
+  }
   const rows = await searchChannels(q, 60);
-  return Response.json(rows);
+  return Response.json(rows, {
+    headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" },
+  });
 }

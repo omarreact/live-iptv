@@ -1,20 +1,21 @@
 # Aether — Live TV
 
-A live television web app. It reads the public [iptv-org](https://github.com/iptv-org/iptv) catalog and plays channels in the browser.
-
-## Features
-
-- Live guide of ~12,000 public channels
-- Browse by category and country
-- Search by station, genre, or country
-- HLS (and MPEG-TS) player with a same-origin stream proxy
-- Save channels and keep a recently-watched list on this device
-
-Streams come from public broadcasters. Many are geo-restricted, offline, or blocked by the origin — the player will say so and let you retry or skip ahead.
+Lightweight Next.js app for browsing and playing public IPTV streams from [iptv-org](https://github.com/iptv-org/iptv).
 
 ## Stack
 
-React 19, TanStack Start, Tailwind v4, hls.js, mpegts.js.
+- **Next.js App Router** (RSC + Route Handlers)
+- **Tailwind CSS v4**
+- **hls.js** / **mpegts.js** client player with multi-source fallback
+- **Zustand** for device-local favorites / recent only
+- Catalog via `https://iptv-org.github.io/api` with `revalidate: 3600`
+
+## Features
+
+- Country → category and category → country filters
+- Dynamic sort: Best · Quality · A–Z · Sources
+- Same-origin stream proxy (`/api/stream`) for CORS / referrer / UA
+- No auth, no database — public guide only
 
 ## Develop
 
@@ -23,11 +24,15 @@ npm install
 npm run dev
 ```
 
-The app listens on port 8080.
-
 ```bash
-npm run build
+npm run build && npm start
 npm run typecheck
 ```
 
-Catalog source: `https://iptv-org.github.io/iptv/index.m3u`
+## Deploy
+
+Vercel (or any Node 20+ host). Set optional `NEXT_PUBLIC_SITE_URL` for metadata.
+
+## Legal
+
+Streams are third-party public broadcasts. Many are geo-restricted or offline. This project does not host media.

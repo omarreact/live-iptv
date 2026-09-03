@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getGuideSummary } from "@/lib/iptv/provider/iptv-org";
 
+export const revalidate = 3600;
+
 function flagEmoji(code: string): string {
   const cc = code.toUpperCase();
   if (cc.length !== 2) return "";
