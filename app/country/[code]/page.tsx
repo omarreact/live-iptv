@@ -2,13 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChannelGrid } from "@/components/channel-card";
 import { Button } from "@/components/ui/button";
-import { CATEGORY_META } from "@/lib/iptv/meta";
+import { CATEGORY_META, categoryLabel } from "@/lib/iptv/meta";
 import { getChannelsByCountry } from "@/lib/iptv/provider/iptv-org";
 import { cn } from "@/lib/utils";
 
 /**
- * Hierarchy: Country → Channels → optional Category filter.
- * All catalog work runs on the server via the iptv-org provider (Next.js fetch cache).
+ * Hierarchy: Country → Channels → Category filter (primary shelves first).
  */
 export default async function CountryPage({
   params,
@@ -19,23 +18,14 @@ export default async function CountryPage({
 }) {
   const { code } = await params;
   const { category } = await searchParams;
-  const { country, channels, categoryCounts, totalInCountry } = await getChannelsByCountry(
-    code,
-    category,
-  );
+  const { country, channels, categoryCounts, categoryIds, totalInCountry } =
+    await getChannelsByCountry(code, category);
 
   if (!country && channels.length === 0) notFound();
 
   const title = country?.name ?? code.toUpperCase();
   const activeCategory = category?.trim().toLowerCase() || null;
-  const categoryLabel =
-    activeCategory && CATEGORY_META[activeCategory]
-      ? CATEGORY_META[activeCategory].name
-      : activeCategory;
-
-  const filterKeys = Object.keys(categoryCounts)
-    .filter((id) => CATEGORY_META[id] && categoryCounts[id] > 0)
-    .sort((a, b) => categoryCounts[b] - categoryCounts[a]);
+  const categoryName = activeCategory ? categoryLabel(activeCategory) : null;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8">
@@ -45,24 +35,24 @@ export default async function CountryPage({
       </p>
       <h1 className="mt-2 font-display text-4xl tracking-tight">
         {title}
-        {categoryLabel ? <span className="text-muted"> · {categoryLabel}</span> : null}
+        {categoryName ? <span className="text-muted"> · {categoryName}</span> : null}
       </h1>
       <p className="mt-2 text-muted">
         {channels.length.toLocaleString()} live{" "}
         {channels.length === 1 ? "channel" : "channels"}
-        {categoryLabel ? ` in ${categoryLabel.toLowerCase()}` : ""}
+        {categoryName ? ` in ${categoryName.toLowerCase()}` : ""}
       </p>
 
-      {filterKeys.length > 0 ? (
+      {categoryIds.length > 0 ? (
         <div className="mt-6 flex flex-wrap gap-2">
-          <CategoryChip
+          <FilterChip
             href={`/country/${code.toLowerCase()}`}
             active={!activeCategory}
             label="All"
             count={totalInCountry}
           />
-          {filterKeys.map((id) => (
-            <CategoryChip
+          {categoryIds.map((id) => (
+            <FilterChip
               key={id}
               href={`/country/${code.toLowerCase()}?category=${id}`}
               active={activeCategory === id}
@@ -81,16 +71,23 @@ export default async function CountryPage({
         )}
       </div>
 
-      <div className="mt-8">
+      <div className="mt-8 flex flex-wrap gap-3">
         <Button variant="ghost" asChild>
           <Link href="/browse">All countries</Link>
         </Button>
+        {activeCategory ? (
+          <Button variant="secondary" asChild>
+            <Link href={`/category/${activeCategory}?country=${code.toLowerCase()}`}>
+              Open {categoryName} worldwide
+            </Link>
+          </Button>
+        ) : null}
       </div>
     </main>
   );
 }
 
-function CategoryChip({
+function FilterChip({
   href,
   active,
   label,
@@ -113,7 +110,7 @@ function CategoryChip({
     >
       {label}
       {typeof count === "number" ? (
-        <span className={cn("text-xs", active ? "opacity-80" : "text-subtle")}>
+        <span className={cn("text-xs tabular-nums", active ? "opacity-80" : "text-subtle")}>
           {count}
         </span>
       ) : null}
@@ -133,7 +130,7 @@ export async function generateMetadata({
   const { country } = await getChannelsByCountry(code, category);
   const name = country?.name ?? code.toUpperCase();
   const cat = category?.trim().toLowerCase();
-  const catName = cat && CATEGORY_META[cat] ? CATEGORY_META[cat].name : null;
+  const catName = cat ? categoryLabel(cat) : null;
   return {
     title: catName ? `${name} · ${catName} · Aether` : `${name} · Aether`,
   };

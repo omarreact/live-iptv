@@ -1,19 +1,19 @@
 export const CATEGORY_META: Record<string, { name: string; description: string }> = {
   news: { name: "News", description: "Live newsrooms and rolling coverage" },
   sports: { name: "Sports", description: "Matches, highlights, and sports talk" },
+  kids: { name: "Kids", description: "Animation and children's programming" },
   movies: { name: "Movies", description: "Film channels from around the world" },
-  music: { name: "Music", description: "Live music, videos, and radio TV" },
   documentary: { name: "Documentary", description: "The real world, on a loop" },
   entertainment: { name: "Entertainment", description: "Variety, talk, and pop culture" },
-  kids: { name: "Kids", description: "Animation and children's programming" },
+  music: { name: "Music", description: "Live music, videos, and radio TV" },
+  series: { name: "Series", description: "Serialized drama and fiction" },
   science: { name: "Science", description: "Science, space, and technology" },
   culture: { name: "Culture", description: "Art, history, and the humanities" },
-  weather: { name: "Weather", description: "Forecasts and storm tracking" },
   business: { name: "Business", description: "Markets, money, and the economy" },
+  weather: { name: "Weather", description: "Forecasts and storm tracking" },
   education: { name: "Education", description: "Learning and public knowledge" },
   lifestyle: { name: "Lifestyle", description: "Food, fashion, home, and health" },
   travel: { name: "Travel", description: "Places, journeys, and the road" },
-  series: { name: "Series", description: "Serialized drama and fiction" },
   classic: { name: "Classic", description: "Programming from earlier decades" },
   comedy: { name: "Comedy", description: "Stand-up, sitcoms, and sketches" },
   cooking: { name: "Cooking", description: "Kitchens, recipes, and food TV" },
@@ -30,18 +30,50 @@ export const CATEGORY_META: Record<string, { name: string; description: string }
   interactive: { name: "Interactive", description: "Audience-driven programming" },
 };
 
-export const HOME_ROW_IDS = [
+/**
+ * Primary guide shelves — the ones we always surface first
+ * on home, browse, and country/category filter chips.
+ */
+export const PRIMARY_CATEGORY_IDS = [
   "news",
   "sports",
+  "kids",
   "movies",
-  "music",
   "documentary",
   "entertainment",
-  "kids",
+  "music",
+  "series",
   "science",
   "culture",
+  "business",
   "weather",
 ] as const;
+
+export type PrimaryCategoryId = (typeof PRIMARY_CATEGORY_IDS)[number];
+
+/** Home rows follow the same primary order. */
+export const HOME_ROW_IDS = PRIMARY_CATEGORY_IDS;
+
+const PRIMARY_RANK = new Map(
+  PRIMARY_CATEGORY_IDS.map((id, index) => [id, index] as const),
+);
+
+/** Sort category ids: primary shelves first (fixed order), then by count desc. */
+export function sortCategoryIds(
+  ids: string[],
+  counts?: Record<string, number>,
+): string[] {
+  return [...ids].sort((a, b) => {
+    const ra = PRIMARY_RANK.get(a as PrimaryCategoryId);
+    const rb = PRIMARY_RANK.get(b as PrimaryCategoryId);
+    if (ra !== undefined && rb !== undefined) return ra - rb;
+    if (ra !== undefined) return -1;
+    if (rb !== undefined) return 1;
+    const ca = counts?.[a] ?? 0;
+    const cb = counts?.[b] ?? 0;
+    return cb - ca || a.localeCompare(b);
+  });
+}
 
 export const FEATURED_NEEDLES = [
   "al jazeera english",
@@ -74,4 +106,8 @@ export const FEATURED_NEEDLES = [
 
 export function categoryKey(name: string): string {
   return name.trim().toLowerCase();
+}
+
+export function categoryLabel(id: string): string {
+  return CATEGORY_META[id]?.name ?? id;
 }
