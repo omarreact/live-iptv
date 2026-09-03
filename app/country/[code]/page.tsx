@@ -4,28 +4,45 @@ import { ChannelGrid } from "@/components/channel-card";
 import { Button } from "@/components/ui/button";
 import { CATEGORY_META, categoryLabel } from "@/lib/iptv/meta";
 import { getChannelsByCountry } from "@/lib/iptv/provider/iptv-org";
+import { parseSortMode, SORT_MODES, type SortMode } from "@/lib/iptv/sort";
 import { cn } from "@/lib/utils";
 
-/**
- * Hierarchy: Country → Channels → Category filter (primary shelves first).
- */
+const SORT_LABELS: Record<SortMode, string> = {
+  default: "Best",
+  quality: "Quality",
+  name: "A–Z",
+  streams: "Sources",
+};
+
 export default async function CountryPage({
   params,
   searchParams,
 }: {
   params: Promise<{ code: string }>;
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{ category?: string; sort?: string }>;
 }) {
   const { code } = await params;
-  const { category } = await searchParams;
+  const sp = await searchParams;
+  const sort = parseSortMode(sp.sort);
   const { country, channels, categoryCounts, categoryIds, totalInCountry } =
-    await getChannelsByCountry(code, category);
+    await getChannelsByCountry(code, sp.category, sort);
 
   if (!country && channels.length === 0) notFound();
 
   const title = country?.name ?? code.toUpperCase();
-  const activeCategory = category?.trim().toLowerCase() || null;
+  const activeCategory = sp.category?.trim().toLowerCase() || null;
   const categoryName = activeCategory ? categoryLabel(activeCategory) : null;
+  const base = `/country/${code.toLowerCase()}`;
+
+  function href(next: { category?: string | null; sort?: SortMode }) {
+    const p = new URLSearchParams();
+    const cat = next.category === undefined ? activeCategory : next.category;
+    const s = next.sort ?? sort;
+    if (cat) p.set("category", cat);
+    if (s !== "default") p.set("sort", s);
+    const q = p.toString();
+    return q ? `${base}?${q}` : base;
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8">
@@ -45,16 +62,11 @@ export default async function CountryPage({
 
       {categoryIds.length > 0 ? (
         <div className="mt-6 flex flex-wrap gap-2">
-          <FilterChip
-            href={`/country/${code.toLowerCase()}`}
-            active={!activeCategory}
-            label="All"
-            count={totalInCountry}
-          />
+          <FilterChip href={href({ category: null })} active={!activeCategory} label="All" count={totalInCountry} />
           {categoryIds.map((id) => (
             <FilterChip
               key={id}
-              href={`/country/${code.toLowerCase()}?category=${id}`}
+              href={href({ category: id })}
               active={activeCategory === id}
               label={CATEGORY_META[id]?.name ?? id}
               count={categoryCounts[id]}
@@ -62,6 +74,18 @@ export default async function CountryPage({
           ))}
         </div>
       ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted">Sort</span>
+        {SORT_MODES.map((mode) => (
+          <FilterChip
+            key={mode}
+            href={href({ sort: mode })}
+            active={sort === mode}
+            label={SORT_LABELS[mode]}
+          />
+        ))}
+      </div>
 
       <div className="mt-8">
         {channels.length ? (

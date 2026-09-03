@@ -3,7 +3,15 @@ import { notFound } from "next/navigation";
 import { ChannelGrid } from "@/components/channel-card";
 import { Button } from "@/components/ui/button";
 import { getChannelsByCategory } from "@/lib/iptv/provider/iptv-org";
+import { parseSortMode, SORT_MODES, type SortMode } from "@/lib/iptv/sort";
 import { cn } from "@/lib/utils";
+
+const SORT_LABELS: Record<SortMode, string> = {
+  default: "Best",
+  quality: "Quality",
+  name: "A–Z",
+  streams: "Sources",
+};
 
 function flagEmoji(code: string): string {
   const cc = code.toUpperCase();
@@ -11,30 +19,39 @@ function flagEmoji(code: string): string {
   return String.fromCodePoint(...[...cc].map((c) => 127397 + c.charCodeAt(0)));
 }
 
-/**
- * Hierarchy: Category → Channels → optional Country filter.
- * Mirrors country pages so users can start from either axis.
- */
 export default async function CategoryPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ country?: string }>;
+  searchParams: Promise<{ country?: string; sort?: string }>;
 }) {
   const { id } = await params;
-  const { country } = await searchParams;
+  const sp = await searchParams;
+  const sort = parseSortMode(sp.sort);
   const { category, channels, countryCounts, totalInCategory } = await getChannelsByCategory(
     id,
-    country,
+    sp.country,
+    sort,
   );
 
   if (!category) notFound();
 
-  const activeCountry = country?.trim().toUpperCase() || null;
+  const activeCountry = sp.country?.trim().toUpperCase() || null;
   const activeCountryMeta = activeCountry
     ? countryCounts.find((c) => c.code === activeCountry)
     : null;
+  const base = `/category/${category.id}`;
+
+  function href(next: { country?: string | null; sort?: SortMode }) {
+    const p = new URLSearchParams();
+    const cc = next.country === undefined ? activeCountry : next.country;
+    const s = next.sort ?? sort;
+    if (cc) p.set("country", String(cc).toLowerCase());
+    if (s !== "default") p.set("sort", s);
+    const q = p.toString();
+    return q ? `${base}?${q}` : base;
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8">
@@ -56,7 +73,7 @@ export default async function CategoryPage({
       {countryCounts.length > 0 ? (
         <div className="mt-6 flex flex-wrap gap-2">
           <FilterChip
-            href={`/category/${category.id}`}
+            href={href({ country: null })}
             active={!activeCountry}
             label="All countries"
             count={totalInCategory}
@@ -64,7 +81,7 @@ export default async function CategoryPage({
           {countryCounts.slice(0, 40).map((c) => (
             <FilterChip
               key={c.code}
-              href={`/category/${category.id}?country=${c.code.toLowerCase()}`}
+              href={href({ country: c.code })}
               active={activeCountry === c.code}
               label={`${c.flag ?? flagEmoji(c.code)} ${c.code}`}
               count={c.count}
@@ -72,6 +89,18 @@ export default async function CategoryPage({
           ))}
         </div>
       ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted">Sort</span>
+        {SORT_MODES.map((mode) => (
+          <FilterChip
+            key={mode}
+            href={href({ sort: mode })}
+            active={sort === mode}
+            label={SORT_LABELS[mode]}
+          />
+        ))}
+      </div>
 
       <div className="mt-8">
         {channels.length ? (
