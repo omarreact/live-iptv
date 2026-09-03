@@ -1,5 +1,5 @@
-import type { CallToolResult } from "./types.ts";
-import { isLoginRequired } from "./login.ts";
+import type { CallToolResult } from "./types";
+import { isLoginRequired } from "./login";
 
 export type CallToolErrorKind =
   | "login"
