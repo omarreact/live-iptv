@@ -5,6 +5,7 @@ node_modules/
 .env.*
 .vercel/
 dist/
+.next/
 artifacts/
 screenshots/*.png
 screenshots/*.json
