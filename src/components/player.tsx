@@ -20,7 +20,6 @@ import { proxiedStreamUrl, streamKind } from "@/lib/iptv/stream";
 import { useLibrary } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { ChannelCard } from "./channel-card";
-import { LogoMark } from "./logo-mark";
 import { Button } from "./ui/button";
 
 type Destroyable = { destroy: () => void };
@@ -299,7 +298,6 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     setMuted(v === 0);
   }
   const next = related[0];
-  const streamCount = channel.streams?.length ?? 1;
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg lg:flex-row">
@@ -330,8 +328,8 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
         ) : null}
         {error ? (
           <div className="absolute inset-0 flex items-center justify-center p-6">
-            <div className="max-w-md space-y-4 rounded-2xl border border-border bg-surface/95 p-6 text-center shadow-[var(--shadow-card)] backdrop-blur-xl">
-              <p className="font-display text-2xl tracking-tight">Signal lost</p>
+            <div className="max-w-md space-y-4 rounded-xl border border-border bg-surface p-6 text-center">
+              <p className="text-xl font-semibold">Signal lost</p>
               <p className="text-sm text-muted">{error}</p>
               <div className="flex flex-wrap justify-center gap-2">
                 <Button
@@ -377,17 +375,10 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           <Button variant="ghost" size="icon" onClick={() => router.push("/")} aria-label="Back">
             <ChevronLeft className="size-5" />
           </Button>
-          <div className="hidden items-center gap-2 sm:flex">
-            <LogoMark className="size-6" />
-            <span className="text-xs font-black tracking-[0.14em]">PINFLIX</span>
-          </div>
           <div className="min-w-0 flex-1 text-center sm:text-left">
-            <p className="flex items-center justify-center gap-2 truncate font-semibold sm:justify-start"><span className="size-1.5 shrink-0 rounded-full bg-brand live-dot" />{channel.shortName}</p>
+            <p className="truncate font-medium">{channel.shortName}</p>
             <p className="truncate text-xs text-muted">
-              {channel.groups.join(" · ") || "Live"}
-              {channel.quality ? ` · ${channel.quality}` : ""}
-              {channel.country ? ` · ${channel.country}` : ""}
-              {streamCount > 1 ? ` · ${streamCount} streams` : ""}
+              {[channel.country, channel.quality].filter(Boolean).join(" · ") || "Live TV"}
             </p>
           </div>
           <Button
@@ -457,10 +448,9 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           </div>
         </div>
       </div>
-      <aside className="border-t border-border bg-surface/95 lg:h-dvh lg:w-[340px] lg:overflow-y-auto lg:border-l lg:border-t-0">
-        <div className="px-4 py-4 sm:px-5">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand">Keep watching</p>
-          <h2 className="mt-1 text-2xl font-bold tracking-[-0.035em]">More live</h2>
+      <aside className="border-t border-border bg-surface lg:h-dvh lg:w-[300px] lg:overflow-y-auto lg:border-l lg:border-t-0">
+        <div className="px-4 py-4">
+          <h2 className="text-base font-semibold">More channels</h2>
         </div>
         <div className="hide-scrollbar flex gap-3 overflow-x-auto px-4 pb-6 lg:flex-col lg:overflow-x-visible">
           {related.map((ch) => (
