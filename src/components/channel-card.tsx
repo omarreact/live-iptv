@@ -49,7 +49,7 @@ export function ChannelCard({
             alt=""
             fill
             sizes={featured ? "288px" : "176px"}
-            unoptimized
+            unoptimized={/\.(?:svg|gif)(?:\?|$)/i.test(channel.logo)}
             loading="lazy"
             referrerPolicy="no-referrer"
             onError={() => setBroken(true)}
