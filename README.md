@@ -30,9 +30,11 @@ optional TMDB title enrichment
 hls.js / native HLS / mpegts.js
 ```
 
-The health layer combines transport safety, stream restrictions, quality, and short-lived runtime failure hints. Failed sources are temporarily penalized on warm server instances so later playback can prefer a healthier backup.
+The health layer combines transport safety, stream restrictions, quality, and passive runtime observations. Each proxied upstream attempt records success/failure plus response latency. Pinflix keeps a bounded, short-lived in-memory health profile per source (success ratio, consecutive failures, and EWMA latency), then re-ranks primary/backup sources on later opens. This is intentionally viewer-anonymous and Vercel-safe: it stores no user identifiers and does not run expensive background probes.
 
-The proxy remains catalog-restricted and blocks private/internal hosts.
+A viewer-safe diagnostic endpoint is available at `/api/health?channel=<id>`. It returns only aggregate availability, source count, preferred quality, and health score — never upstream URLs or request headers.
+
+The proxy remains catalog-restricted and blocks private/internal hosts. The health/failover design is inspired by the operational ideas used by dedicated IPTV managers such as Dispatcharr — stream monitoring, source priority, and automatic failover — without adding Dispatcharr as a runtime dependency.
 
 ## Stack
 
@@ -45,6 +47,7 @@ The proxy remains catalog-restricted and blocks private/internal hosts.
 - **iptv-org API** for channels, streams, countries, categories, logos, and guide mappings
 - **iptv-org EPG/XMLTV** for Now/Next data where available
 - **TMDB** optional metadata enrichment
+- **Passive health/failover service** for source priority, latency observation, and automatic backup selection
 
 ## Optional environment variables
 

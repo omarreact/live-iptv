@@ -223,11 +223,12 @@ export async function proxyStream(request: Request): Promise<Response> {
   }
 
   const extras = extrasFromRequest(incoming);
+  const startedAt = Date.now();
   let result: UpstreamResult;
   try {
     result = await fetchUpstream(target, request, extras);
   } catch (err) {
-    recordStreamFailure(target.href);
+    recordStreamFailure(target.href, Date.now() - startedAt);
     return new Response(err instanceof Error ? err.message : "Upstream unreachable", {
       status: 502,
       headers: {
@@ -240,7 +241,7 @@ export async function proxyStream(request: Request): Promise<Response> {
   const { response: upstream, finalUrl } = result;
 
   if (!upstream.ok && upstream.status !== 206) {
-    recordStreamFailure(target.href);
+    recordStreamFailure(target.href, Date.now() - startedAt);
     const headers = passthroughHeaders(upstream, "text/plain; charset=utf-8", finalUrl);
     // Surface gateway failure as 502 so the client can distinguish a broken
     // upstream stream from a missing Pinflix API route.
@@ -250,7 +251,7 @@ export async function proxyStream(request: Request): Promise<Response> {
     });
   }
 
-  recordStreamSuccess(target.href);
+  recordStreamSuccess(target.href, Date.now() - startedAt);
 
   const contentType = upstream.headers.get("content-type") ?? "";
   const origin = incoming.origin;
