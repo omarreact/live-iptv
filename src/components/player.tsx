@@ -59,6 +59,11 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   }, [channelPreview, addRecent]);
 
   useEffect(() => {
+    setStreamIndex(0);
+    setTransport("proxy");
+  }, [channel.id]);
+
+  useEffect(() => {
     const controller = new AbortController();
     setEpg(null);
     fetch("/api/epg?channel=" + encodeURIComponent(channel.id), { signal: controller.signal })
@@ -129,17 +134,18 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     function fail(message?: string, status?: number) {
       if (cancelled) return;
 
-      // A 4xx from the upstream itself usually means this source is stale.
-      // Prefer the next catalog source when one exists.
-      if (transport === "proxy" && status && status >= 400 && status < 500 && hasNextStream) {
+      // A concrete proxy error means the upstream source itself failed.
+      // Skip it immediately when a ranked backup exists instead of retrying
+      // the same origin directly and making the viewer wait through two failures.
+      if (transport === "proxy" && status && status >= 400 && hasNextStream) {
         setTransport("proxy");
         setStreamIndex((n) => n + 1);
         return;
       }
 
-      // Direct browser fallback is safe only for clean HTTPS hostnames.
-      // Never expose HTTP/raw-IP streams to an HTTPS page, and don't try
-      // direct playback when the catalog requires headers the browser cannot set.
+      // If the proxy failed without an upstream HTTP status (for example a
+      // network/TLS path the viewer's browser may still reach), direct fallback
+      // is safe only for clean HTTPS hostnames.
       if (transport === "proxy" && directEligible) {
         setTransport("direct");
         return;
