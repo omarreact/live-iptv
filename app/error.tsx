@@ -16,7 +16,7 @@ export default function ErrorPage({
 
   return (
     <main className="mx-auto flex min-h-[60dvh] max-w-2xl items-center px-4 py-16 sm:px-8">
-      <div className="w-full rounded-xl bg-elevated p-8 text-center shadow-[var(--shadow-border)]">
+      <div className="w-full text-center">
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">Pinflix</p>
         <h1 className="mt-2 font-display text-4xl tracking-tight">
           Something interrupted the signal
