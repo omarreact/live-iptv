@@ -88,6 +88,20 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       userAgent: activeStream.userAgent,
       referrer: activeStream.referrer,
     };
+    const directEligible = (() => {
+      try {
+        const url = new URL(activeStream.url);
+        const isIpHost = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname);
+        return (
+          url.protocol === "https:" &&
+          !isIpHost &&
+          !activeStream.userAgent &&
+          !activeStream.referrer
+        );
+      } catch {
+        return false;
+      }
+    })();
     const src = transport === "proxy" ? proxiedStreamUrl(activeChannel) : activeStream.url;
     const kind = streamKind(activeStream.url);
     const hasNextStream = (channel.streams?.length ?? 0) > streamIndex + 1;
@@ -103,9 +117,10 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
         return;
       }
 
-      // A proxy/gateway failure can be specific to Vercel's network path.
-      // Give the same public stream one direct browser attempt before abandoning it.
-      if (transport === "proxy") {
+      // Direct browser fallback is safe only for clean HTTPS hostnames.
+      // Never expose HTTP/raw-IP streams to an HTTPS page, and don't try
+      // direct playback when the catalog requires headers the browser cannot set.
+      if (transport === "proxy" && directEligible) {
         setTransport("direct");
         return;
       }
@@ -306,7 +321,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
             <div className="size-10 animate-spin rounded-full border-2 border-border-strong border-t-brand" />
             <p className="text-xs font-medium text-muted">
               {transport === "direct"
-                ? "Trying the direct signal…"
+                ? "Trying a secure direct signal…"
                 : streamIndex > 0
                   ? "Trying a backup stream…"
                   : "Connecting to live TV…"}
