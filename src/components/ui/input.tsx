@@ -6,11 +6,10 @@ function Input({ className, type = "text", ...props }: InputHTMLAttributes<HTMLI
     <input
       type={type}
       className={cn(
-        "h-12 w-full rounded-xl border border-border bg-surface/90 px-4 text-sm text-fg shadow-[var(--shadow-border)] backdrop-blur-sm",
+        "h-11 w-full rounded-lg border border-border bg-surface px-3 text-sm text-fg",
         "placeholder:text-subtle",
-        "transition-[border-color,box-shadow,background-color] duration-150 ease-out",
-        "hover:border-border-strong hover:bg-elevated",
-        "focus-visible:border-brand/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/20",
+        "transition-colors hover:border-border-strong",
+        "focus-visible:border-brand/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/15",
         "disabled:opacity-40",
         className,
       )}
