@@ -26,8 +26,8 @@ async function sportsItems(country: string): Promise<HotItem[]> {
   if (!result.channels.length) result = await getFastCategoryChannels("sports", 8);
 
   const candidates = result.channels.slice(0, 5);
-  const programmes = await Promise.all(
-    candidates.map(async (preview) => {
+  const programmes: Array<HotItem | null> = await Promise.all(
+    candidates.map(async (preview): Promise<HotItem | null> => {
       const channel = await timeout(getChannelById(preview.id), null);
       if (!channel?.guide) return null;
 
@@ -39,7 +39,7 @@ async function sportsItems(country: string): Promise<HotItem[]> {
 
       return {
         id: `sport-${preview.id}`,
-        kind: "sport" as const,
+        kind: "sport",
         title: guide.now.title,
         subtitle: `Live now on ${preview.shortName}`,
         href: `/watch/${preview.id}`,
@@ -47,7 +47,7 @@ async function sportsItems(country: string): Promise<HotItem[]> {
     }),
   );
 
-  const live = programmes.filter((item): item is HotItem => Boolean(item));
+  const live = programmes.filter((item): item is HotItem => item !== null);
   if (live.length) return live.slice(0, 3);
 
   const first = candidates[0];
