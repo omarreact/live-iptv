@@ -31,6 +31,19 @@ function restrictionPenalty(s: Pick<Stream, "geoBlocked" | "not247">): number {
   return Number(s.geoBlocked) * 2 + Number(s.not247);
 }
 
+function transportPenalty(s: Pick<Stream, "url">): number {
+  try {
+    const url = new URL(s.url);
+    const isIpHost = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname);
+    let penalty = 0;
+    if (url.protocol !== "https:") penalty += 4;
+    if (isIpHost) penalty += 2;
+    return penalty;
+  } catch {
+    return 10;
+  }
+}
+
 /**
  * Dynamic stream ranking for playback fallback order:
  * 1. Prefer unrestricted (not geo / not 24-7-only)
@@ -40,6 +53,8 @@ function restrictionPenalty(s: Pick<Stream, "geoBlocked" | "not247">): number {
 export function compareStreams(a: Stream, b: Stream): number {
   const rest = restrictionPenalty(a) - restrictionPenalty(b);
   if (rest !== 0) return rest;
+  const transport = transportPenalty(a) - transportPenalty(b);
+  if (transport !== 0) return transport;
   const q = qualityScore(b.quality) - qualityScore(a.quality);
   if (q !== 0) return q;
   return a.id.localeCompare(b.id);
