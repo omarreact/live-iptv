@@ -31,66 +31,78 @@ export function ChannelCard({
 
   return (
     <Link
-      href={`/watch/${channel.id}`}
+      href={"/watch/" + channel.id}
       className={cn(
-        "group relative flex shrink-0 flex-col gap-2.5 outline-none",
-        featured ? "w-56 sm:w-64" : "w-36 sm:w-44",
+        "group relative flex shrink-0 flex-col gap-3 outline-none",
+        featured ? "w-64 sm:w-72" : "w-40 sm:w-48",
         className,
       )}
     >
       <div
         className={cn(
-          "relative overflow-hidden bg-elevated shadow-[var(--shadow-border)]",
-          "transition-[box-shadow,transform] duration-200 ease-out",
-          "group-hover:shadow-[var(--shadow-border-hover)] group-hover:-translate-y-0.5",
+          "relative overflow-hidden border border-border bg-elevated shadow-[var(--shadow-card)]",
+          "transition-[border-color,box-shadow,transform] duration-250 ease-out",
+          "group-hover:-translate-y-1 group-hover:border-brand/35 group-hover:shadow-[var(--shadow-border-hover)]",
           "group-focus-visible:ring-2 group-focus-visible:ring-ring/70",
-          featured ? "aspect-[16/10] rounded-xl" : "aspect-[16/10] rounded-lg",
+          featured ? "aspect-video rounded-2xl" : "aspect-video rounded-xl",
         )}
       >
+        <div className="brand-grid pointer-events-none absolute inset-0 opacity-35" />
         {showLogo ? (
           <Image
             src={channel.logo}
             alt=""
             fill
-            sizes={featured ? "(min-width: 640px) 256px, 224px" : "(min-width: 640px) 176px, 144px"}
+            sizes={featured ? "(min-width: 640px) 288px, 256px" : "(min-width: 640px) 192px, 160px"}
             unoptimized
             loading="lazy"
             referrerPolicy="no-referrer"
             onError={() => setBroken(true)}
-            className="absolute inset-0 size-full object-contain bg-surface p-5 outline-none"
+            className="absolute inset-0 size-full bg-surface/45 object-contain p-5 outline-none sm:p-6"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-surface">
-            <span className="font-display text-2xl tracking-tight text-muted">
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-elevated to-surface">
+            <span className="text-3xl font-black tracking-[-0.05em] text-muted">
               {monogram(channel.shortName)}
             </span>
           </div>
         )}
-        <div className="pointer-events-none absolute inset-0 bg-bg/0 transition-colors duration-200 group-hover:bg-bg/25" />
-        <div className="absolute right-2 top-2 flex items-center gap-1">
-          {channel.quality ? (
-            <span className="rounded-xs bg-bg/80 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-fg">
-              {channel.quality}
-            </span>
-          ) : null}
+
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg/65 via-transparent to-transparent opacity-60" />
+
+        <div className="absolute left-2.5 top-2.5">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white shadow-md shadow-brand/15">
+            <span className="size-1 rounded-full bg-white" />
+            Live
+          </span>
         </div>
-        <div
-          className={cn(
-            "absolute inset-0 flex items-center justify-center",
-            "opacity-0 transition-opacity duration-200 group-hover:opacity-100",
-          )}
-        >
-          <span className="flex size-11 items-center justify-center rounded-full bg-accent text-accent-fg">
-            <Play className="size-4 fill-current ml-0.5" />
+
+        {channel.quality ? (
+          <span className="absolute right-2.5 top-2.5 rounded-full border border-white/10 bg-bg/75 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-fg backdrop-blur">
+            {channel.quality}
+          </span>
+        ) : null}
+
+        <div className="absolute inset-0 flex items-center justify-center bg-bg/0 transition-colors duration-200 group-hover:bg-bg/15">
+          <span className="flex size-12 scale-90 items-center justify-center rounded-full bg-white text-bg opacity-0 shadow-xl transition-all duration-200 group-hover:scale-100 group-hover:opacity-100">
+            <Play className="ml-0.5 size-4 fill-current" />
           </span>
         </div>
       </div>
+
       <div className="min-w-0 px-0.5">
-        <p className="truncate text-sm font-medium text-fg">{channel.shortName}</p>
-        <p className="truncate text-xs text-muted">
-          {channel.groups[0] ?? channel.country ?? "Live"}
-          {channel.geoBlocked ? " · Restricted" : ""}
+        <p className="truncate text-sm font-semibold text-fg transition-colors group-hover:text-white">
+          {channel.shortName}
         </p>
+        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+          <span className="truncate">{channel.groups[0] ?? channel.country ?? "Live TV"}</span>
+          {channel.country ? (
+            <>
+              <span className="text-subtle">·</span>
+              <span className="shrink-0 uppercase">{channel.country}</span>
+            </>
+          ) : null}
+        </div>
       </div>
     </Link>
   );
@@ -98,7 +110,7 @@ export function ChannelCard({
 
 export function ChannelGrid({ channels }: { channels: ChannelPreview[] }) {
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-x-3.5 gap-y-7 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {channels.map((ch) => (
         <ChannelCard key={ch.id} channel={ch} className="w-full" />
       ))}
