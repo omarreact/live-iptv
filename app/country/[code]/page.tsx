@@ -55,7 +55,7 @@ export default async function CountryPage({
   }
 
   return (
-    <main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+    <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
         {country?.flag ? <span className="mr-2">{country.flag}</span> : null}
         {title}

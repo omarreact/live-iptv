@@ -7,7 +7,7 @@ import {
   sortCategoryIds,
 } from "../meta";
 import { normalizeChannels, toUiChannel } from "../adapters/normalize";
-import { sortChannels, sortCountriesByCount, type SortMode } from "../sort";
+import { rankStreams, sortChannels, sortCountriesByCount, type SortMode } from "../sort";
 import type {
   AppChannel,
   Category,
@@ -18,8 +18,10 @@ import type {
   IptvOrgCategory,
   IptvOrgChannel,
   IptvOrgCountry,
+  IptvOrgGuide,
   IptvOrgLogo,
   IptvOrgStream,
+  GuideSource,
 } from "../types";
 import { toChannelPreview } from "../types";
 
@@ -54,12 +56,13 @@ export type IptvCatalog = {
 };
 
 async function buildIptvCatalog(): Promise<IptvCatalog> {
-  const [rawChannels, rawStreams, countries, categories, logos] = await Promise.all([
+  const [rawChannels, rawStreams, countries, categories, logos, guides] = await Promise.all([
     fetchJson<IptvOrgChannel[]>("channels.json"),
     fetchJson<IptvOrgStream[]>("streams.json"),
     fetchJson<IptvOrgCountry[]>("countries.json"),
     fetchJson<IptvOrgCategory[]>("categories.json"),
     fetchJson<IptvOrgLogo[]>("logos.json").catch(() => [] as IptvOrgLogo[]),
+    fetchJson<IptvOrgGuide[]>("guides.json").catch(() => [] as IptvOrgGuide[]),
   ]);
 
   const logoByChannel = new Map<string, string>();
@@ -70,9 +73,20 @@ async function buildIptvCatalog(): Promise<IptvCatalog> {
     }
   }
 
+  const guideByChannel = new Map<string, GuideSource>();
+  for (const guide of guides) {
+    if (!guide.channel || !guide.site_id || !guide.url || guideByChannel.has(guide.channel)) continue;
+    guideByChannel.set(guide.channel, {
+      site: guide.site,
+      siteId: guide.site_id,
+      lang: guide.lang,
+      url: guide.url,
+    });
+  }
+
   const appChannels: AppChannel[] = normalizeChannels(rawChannels, rawStreams);
   const channels: Channel[] = appChannels.map((ch) =>
-    toUiChannel(ch, logoByChannel.get(ch.id) ?? ch.logo ?? ""),
+    toUiChannel(ch, logoByChannel.get(ch.id) ?? ch.logo ?? "", guideByChannel.get(ch.id) ?? null),
   );
 
   const byId = new Map<string, Channel>();
@@ -343,7 +357,23 @@ export async function getGuideSummary() {
 
 export async function getChannelById(id: string): Promise<Channel | null> {
   const catalog = await getIptvCatalog();
-  return catalog.byId.get(id) ?? null;
+  const channel = catalog.byId.get(id);
+  if (!channel) return null;
+
+  // Re-rank at request time so recent upstream failures can influence the
+  // primary/backup order on warm server instances.
+  const streams = rankStreams(channel.streams);
+  const primary = streams[0];
+  return {
+    ...channel,
+    streams,
+    url: primary?.url ?? channel.url,
+    quality: primary?.quality ?? channel.quality,
+    geoBlocked: primary?.geoBlocked ?? channel.geoBlocked,
+    not247: primary?.not247 ?? channel.not247,
+    userAgent: primary?.userAgent ?? channel.userAgent,
+    referrer: primary?.referrer ?? channel.referrer,
+  };
 }
 
 export async function getRelatedChannels(id: string, limit = 16) {

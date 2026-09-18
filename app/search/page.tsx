@@ -17,9 +17,9 @@ export default function SearchPage() {
 
 function SearchLoading() {
   return (
-    <main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+    <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Search</h1>
-      <div className="mt-5 h-12 max-w-xl rounded-xl bg-surface" />
+      <div className="mt-5 h-12 max-w-2xl rounded-xl bg-surface" />
     </main>
   );
 }
@@ -92,10 +92,10 @@ function SearchPageInner() {
   }, [q, router, searchParams]);
 
   return (
-    <main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+    <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <header>
         <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Search</h1>
-        <p className="mt-2 text-muted">Search for a channel, category, or country.</p>
+        <p className="mt-2 text-muted">Find channels by name, country, or category.</p>
       </header>
 
       <div className="relative mt-5 max-w-xl">
@@ -103,10 +103,10 @@ function SearchPageInner() {
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search channels"
+          placeholder="Search channels, countries…"
           className="h-12 rounded-xl pl-10 pr-4"
           autoFocus
-          aria-label="Search channels"
+          aria-label="Search channels and countries"
         />
       </div>
 
@@ -118,7 +118,7 @@ function SearchPageInner() {
         ) : q.trim().length < 2 ? (
           <p className="text-sm text-subtle">Type at least two letters.</p>
         ) : results.length === 0 ? (
-          <p className="text-sm text-muted">No channels found.</p>
+          <p className="text-sm text-muted">No channels found. Try a country or different spelling.</p>
         ) : (
           <>
             <p className="mb-4 text-sm text-muted">

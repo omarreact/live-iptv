@@ -1,5 +1,12 @@
 import { rankStreams } from "../sort";
-import type { IptvOrgChannel, IptvOrgStream, AppChannel, Channel, Stream } from "../types";
+import type {
+  IptvOrgChannel,
+  IptvOrgStream,
+  AppChannel,
+  Channel,
+  GuideSource,
+  Stream,
+} from "../types";
 
 function isUsableUrl(url: string): boolean {
   return (
@@ -53,8 +60,8 @@ export function toUiStream(raw: IptvOrgStream, channelId: string): Stream {
   };
 }
 
-/** Map AppChannel → UI Channel; streams ranked dynamically for player fallback. */
-export function toUiChannel(app: AppChannel, logoUrl = ""): Channel {
+/** Map AppChannel → UI Channel; streams ranked for resilient player fallback. */
+export function toUiChannel(app: AppChannel, logoUrl = "", guide: GuideSource | null = null): Channel {
   const streams = rankStreams(app.streams.map((s) => toUiStream(s, app.id)));
   const primary = streams[0];
 
@@ -75,5 +82,6 @@ export function toUiChannel(app: AppChannel, logoUrl = ""): Channel {
     altNames: app.alt_names ?? [],
     website: app.website ?? null,
     streams,
+    guide,
   };
 }

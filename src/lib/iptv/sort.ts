@@ -1,3 +1,4 @@
+import { compareStreamHealth, streamHealthScore } from "./health";
 import { PRIMARY_CATEGORY_IDS, type PrimaryCategoryId } from "./meta";
 import type { Channel, Stream } from "./types";
 
@@ -31,30 +32,14 @@ function restrictionPenalty(s: Pick<Stream, "geoBlocked" | "not247">): number {
   return Number(s.geoBlocked) * 2 + Number(s.not247);
 }
 
-function transportPenalty(s: Pick<Stream, "url">): number {
-  try {
-    const url = new URL(s.url);
-    const isIpHost = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname);
-    let penalty = 0;
-    if (url.protocol !== "https:") penalty += 4;
-    if (isIpHost) penalty += 2;
-    return penalty;
-  } catch {
-    return 10;
-  }
-}
-
 /**
- * Dynamic stream ranking for playback fallback order:
- * 1. Prefer unrestricted (not geo / not 24-7-only)
- * 2. Higher resolution
- * 3. Stable id tie-break
+ * Source priority inspired by mature IPTV managers:
+ * health heuristic first, then resolution, then a stable id tie-break.
+ * Runtime failures are handled separately by the player's automatic failover.
  */
 export function compareStreams(a: Stream, b: Stream): number {
-  const rest = restrictionPenalty(a) - restrictionPenalty(b);
-  if (rest !== 0) return rest;
-  const transport = transportPenalty(a) - transportPenalty(b);
-  if (transport !== 0) return transport;
+  const health = compareStreamHealth(a, b);
+  if (health !== 0) return health;
   const q = qualityScore(b.quality) - qualityScore(a.quality);
   if (q !== 0) return q;
   return a.id.localeCompare(b.id);
@@ -73,29 +58,21 @@ function bestPrimaryRank(groups: string[]): number {
   return Number.isFinite(best) ? best : 100;
 }
 
-/**
- * Composite channel score used by the default guide sort.
- * Higher is better.
- */
+/** Composite channel score used by the default guide sort. Higher is better. */
 export function channelScore(ch: Channel): number {
   let score = 0;
 
-  // Availability of the primary stream
   if (!ch.geoBlocked) score += 40;
   if (!ch.not247) score += 20;
 
-  // Resolution of best ranked stream
   const q = qualityScore(ch.quality);
-  score += Math.min(30, Math.round(q / 72)); // 1080p ≈ 15, 2160p ≈ 30
+  score += Math.min(30, Math.round(q / 72));
 
-  // Multiple sources → more resilient player fallback
   const n = ch.streams?.length ?? 0;
   score += Math.min(15, n * 3);
-
-  // Logo present → better card UX
+  if (ch.streams?.[0]) score += Math.round(streamHealthScore(ch.streams[0]) / 8);
   if (ch.logo) score += 5;
-
-  // Prefer channels tagged with primary shelves
+  if (ch.guide) score += 4;
   score += Math.max(0, 12 - bestPrimaryRank(ch.groups));
 
   return score;
@@ -105,13 +82,6 @@ function compareByName(a: Channel, b: Channel): number {
   return a.shortName.localeCompare(b.shortName, undefined, { sensitivity: "base" });
 }
 
-/**
- * Sort a channel list dynamically by mode.
- * - default: composite score (availability → quality → streams → shelf)
- * - quality: resolution, then availability
- * - name: A–Z
- * - streams: most alternate sources first
- */
 export function sortChannels(channels: Channel[], mode: SortMode = "default"): Channel[] {
   const list = [...channels];
 
@@ -145,7 +115,6 @@ export function sortChannels(channels: Channel[], mode: SortMode = "default"): C
   }
 }
 
-/** Sort countries by channel count (desc), then name. */
 export function sortCountriesByCount<T extends { count: number; name: string; code: string }>(
   items: T[],
 ): T[] {

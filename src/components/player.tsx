@@ -10,6 +10,7 @@ import {
   Pause,
   Play,
   RotateCcw,
+  SkipBack,
   SkipForward,
   Volume2,
   VolumeX,
@@ -23,6 +24,13 @@ import { ChannelCard } from "./channel-card";
 import { Button } from "./ui/button";
 
 type Destroyable = { destroy: () => void };
+
+type EpgProgram = { title: string; start: string; end: string };
+type EpgPayload = {
+  now: EpgProgram | null;
+  next: EpgProgram | null;
+  metadata: { id: number; mediaType: "movie" | "tv"; title: string; overview: string; posterPath: string | null } | null;
+};
 
 export function Player({ channel, related }: { channel: Channel; related: ChannelPreview[] }) {
   const channelPreview = useMemo(() => toChannelPreview(channel), [channel]);
@@ -44,10 +52,23 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const [retry, setRetry] = useState(0);
   const [streamIndex, setStreamIndex] = useState(0);
   const [transport, setTransport] = useState<"proxy" | "direct">("proxy");
+  const [epg, setEpg] = useState<EpgPayload | null>(null);
 
   useEffect(() => {
     addRecent(channelPreview);
   }, [channelPreview, addRecent]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setEpg(null);
+    fetch("/api/epg?channel=" + encodeURIComponent(channel.id), { signal: controller.signal })
+      .then((res) => (res.ok ? (res.json() as Promise<EpgPayload>) : null))
+      .then((data) => {
+        if (data) setEpg(data);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [channel.id]);
 
   const revealChrome = useCallback(() => {
     setChromeVisible(true);
@@ -131,7 +152,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       }
 
       setStarted(false);
-      setError(message ?? "This broadcast is offline, geo-blocked, or not reachable from here.");
+      setError(message ?? "This channel is temporarily unavailable.");
     }
 
     const onPlaying = () => {
@@ -298,6 +319,18 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     setMuted(v === 0);
   }
   const next = related[0];
+  const previous = related[1];
+  const nowProgress = epg?.now
+    ? Math.max(
+        0,
+        Math.min(
+          100,
+          ((Date.now() - new Date(epg.now.start).getTime()) /
+            Math.max(1, new Date(epg.now.end).getTime() - new Date(epg.now.start).getTime())) *
+            100,
+        ),
+      )
+    : 0;
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg lg:flex-row">
@@ -319,10 +352,10 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
             <div className="size-10 animate-spin rounded-full border-2 border-border-strong border-t-brand" />
             <p className="text-xs font-medium text-muted">
               {transport === "direct"
-                ? "Trying a secure direct signal…"
+                ? "Trying another source…"
                 : streamIndex > 0
-                  ? "Trying a backup stream…"
-                  : "Connecting to live TV…"}
+                  ? "Trying another source…"
+                  : "Connecting…"}
             </p>
           </div>
         ) : null}
@@ -378,7 +411,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           <div className="min-w-0 flex-1 text-center sm:text-left">
             <p className="truncate font-medium">{channel.shortName}</p>
             <p className="truncate text-xs text-muted">
-              {[channel.country, channel.quality].filter(Boolean).join(" · ") || "Live TV"}
+              {epg?.now?.title ?? ([channel.country, channel.quality].filter(Boolean).join(" · ") || "Live TV")}
             </p>
           </div>
           <Button
@@ -390,6 +423,28 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
             <Bookmark className={cn("size-5", saved && "fill-current")} />
           </Button>
         </div>
+        {epg?.now ? (
+          <div
+            className={cn(
+              "absolute inset-x-0 bottom-14 z-10 px-4 sm:bottom-16 sm:px-5",
+              "transition-[opacity,transform] duration-200 ease-out",
+              chromeVisible ? "opacity-100" : "pointer-events-none translate-y-1 opacity-0",
+            )}
+          >
+            <div className="mx-auto max-w-4xl">
+              <div className="flex items-end justify-between gap-4 text-xs">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-fg">{epg.now.title}</p>
+                  {epg.next ? <p className="mt-0.5 truncate text-muted">Next: {epg.next.title}</p> : null}
+                </div>
+                <span className="shrink-0 font-medium text-brand">LIVE</span>
+              </div>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/15">
+                <div className="h-full rounded-full bg-brand" style={{ width: `${nowProgress}%` }} />
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div
           className={cn(
             "absolute inset-x-0 bottom-0 z-10 flex items-center gap-2 p-3 sm:gap-3 sm:p-4",
@@ -432,6 +487,13 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
             aria-label="Volume"
           />
           <div className="ml-auto flex items-center gap-2">
+            {previous ? (
+              <Button variant="ghost" size="icon" asChild>
+                <Link href={`/watch/${previous.id}`} aria-label="Previous channel">
+                  <SkipBack className="size-5" />
+                </Link>
+              </Button>
+            ) : null}
             {next ? (
               <Button variant="secondary" size="sm" asChild>
                 <Link href={`/watch/${next.id}`}>Next</Link>

@@ -26,6 +26,15 @@ export type IptvOrgStream = {
   http_referrer?: string | null;
 };
 
+export type IptvOrgGuide = {
+  channel: string;
+  feed?: string | null;
+  site: string;
+  site_id: string;
+  lang: string;
+  url: string;
+};
+
 export type IptvOrgChannel = {
   id: string;
   name: string;
@@ -62,7 +71,7 @@ export type AppChannel = IptvOrgChannel & {
   streams: IptvOrgStream[];
 };
 
-/** UI / player channel shape used across the app. */
+/** UI / player stream shape used across the app. */
 export type Stream = {
   id: string;
   url: string;
@@ -74,6 +83,13 @@ export type Stream = {
   not247: boolean;
   userAgent: string | null;
   referrer: string | null;
+};
+
+export type GuideSource = {
+  site: string;
+  siteId: string;
+  lang: string;
+  url: string;
 };
 
 export type Channel = {
@@ -93,6 +109,7 @@ export type Channel = {
   altNames: string[];
   website: string | null;
   streams: Stream[];
+  guide: GuideSource | null;
 };
 
 /** Compact channel shape safe to serialize into lists and browser storage. */

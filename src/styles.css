@@ -1,36 +1,38 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #09090b;
-  --color-surface: #111113;
-  --color-elevated: #18181b;
-  --color-panel: #202024;
-  --color-fg: #f4f4f5;
-  --color-muted: #a1a1aa;
-  --color-subtle: #71717a;
-  --color-accent: #ff435d;
+  --color-bg: #0a0a0b;
+  --color-surface: #141416;
+  --color-elevated: #1c1c1f;
+  --color-panel: #222226;
+  --color-fg: #f5f5f7;
+  --color-muted: #a1a1a6;
+  --color-subtle: #6e6e73;
+  --color-accent: #ff4d4d;
   --color-accent-fg: #ffffff;
-  --color-brand: #ff435d;
-  --color-brand-strong: #ff2045;
-  --color-brand-soft: #2a1015;
-  --color-violet: #8b5cf6;
-  --color-live: #ff435d;
-  --color-success: #31d79b;
-  --color-border: color-mix(in oklab, var(--color-fg) 8%, transparent);
-  --color-border-strong: color-mix(in oklab, var(--color-fg) 16%, transparent);
-  --color-ring: #ff5a70;
+  --color-brand: #ff4d4d;
+  --color-brand-strong: #ff3434;
+  --color-brand-soft: #2a1112;
+  --color-secondary: #3b82f6;
+  --color-live: #ff4d4d;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-border: #2a2a2e;
+  --color-border-strong: #3a3a40;
+  --color-ring: #ff4d4d;
 
   --font-sans: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
 
-  --radius-xs: 5px;
-  --radius-sm: 7px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --radius-xl: 18px;
+  --radius-xl: 16px;
 
-  --shadow-border: 0 0 0 1px color-mix(in oklab, var(--color-fg) 8%, transparent);
-  --shadow-border-hover: 0 0 0 1px color-mix(in oklab, var(--color-fg) 16%, transparent);
+  --shadow-border: 0 0 0 1px var(--color-border);
+  --shadow-border-hover: 0 0 0 1px var(--color-border-strong);
   --shadow-card: none;
   --shadow-brand: none;
 }
@@ -51,6 +53,7 @@
   }
 
   body {
+    margin: 0;
     font-family: var(--font-sans);
     line-height: 1.5;
     background: var(--color-bg);
@@ -105,16 +108,14 @@
   display: none;
 }
 
-.brand-grid,
-.brand-glow,
-.brand-text-gradient {
-  background: none;
+.tv-focus {
+  transition:
+    border-color 160ms ease-out,
+    background-color 160ms ease-out,
+    transform 160ms ease-out;
 }
 
-.brand-text-gradient {
-  color: inherit;
-}
-
-.live-dot {
-  box-shadow: none;
+.tv-focus:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
 }

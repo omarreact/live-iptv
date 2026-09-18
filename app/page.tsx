@@ -1,5 +1,6 @@
-import { Hero } from "@/components/hero";
+import { Search } from "lucide-react";
 import { ChannelRow } from "@/components/channel-row";
+import { RecentRow } from "@/components/recent-row";
 import { getHomeData } from "@/lib/iptv/provider/iptv-org";
 import type { HomeData } from "@/lib/iptv/types";
 
@@ -10,26 +11,60 @@ export default async function HomePage() {
     console.error("Unable to load the Pinflix home catalog", error);
     return { total: 0, countryCount: 0, featured: [], rows: [] };
   });
-  const featured = data.featured[0];
 
   return (
     <main className="pb-14">
-      {featured ? (
-        <Hero channel={featured} total={data.total} countryCount={data.countryCount} />
-      ) : (
-        <section className="mx-auto max-w-[1320px] px-4 py-16 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold tracking-[-0.04em]">Pinflix</h1>
-          <p className="mt-3 text-muted">The live channel guide is temporarily unavailable.</p>
-        </section>
-      )}
+      <section className="mx-auto max-w-[1400px] px-4 py-7 sm:px-6 sm:py-8 lg:px-8">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">Live TV</h1>
+            <p className="mt-1 text-sm text-muted">Watch the world live.</p>
+          </div>
+          {data.total > 0 ? (
+            <p className="hidden text-xs text-subtle sm:block">
+              {data.total.toLocaleString()} channels · {data.countryCount.toLocaleString()} countries
+            </p>
+          ) : null}
+        </div>
 
-      <div className="mx-auto max-w-[1320px] space-y-10 border-t border-border pt-8">
+        <form action="/search" method="get" className="relative mt-5 max-w-2xl">
+          <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted" />
+          <input
+            type="search"
+            name="q"
+            placeholder="Search channels, countries…"
+            aria-label="Search channels and countries"
+            className="h-12 w-full rounded-xl border border-border bg-surface pl-12 pr-4 text-[15px] text-fg outline-none transition-colors placeholder:text-subtle hover:border-border-strong focus:border-brand focus:ring-2 focus:ring-brand/15"
+          />
+        </form>
+      </section>
+
+      <div className="mx-auto max-w-[1400px] space-y-9">
+        <RecentRow />
+
+        {data.featured.length > 0 ? (
+          <ChannelRow
+            category={{ id: "live", name: "Live Now", description: "", count: data.featured.length }}
+            channels={data.featured}
+            showAll={false}
+          />
+        ) : null}
+
         {data.rows.map((row) => (
           <ChannelRow key={row.category.id} category={row.category} channels={row.channels} />
         ))}
       </div>
 
-      <footer className="mx-auto mt-14 max-w-[1320px] border-t border-border px-4 pt-6 text-xs leading-5 text-subtle sm:px-6 lg:px-8">
+      {data.total === 0 ? (
+        <section className="mx-auto mt-10 max-w-[1400px] px-4 sm:px-6 lg:px-8">
+          <div className="rounded-xl border border-border bg-surface p-6">
+            <p className="font-medium">Live channels are temporarily unavailable.</p>
+            <p className="mt-1 text-sm text-muted">Try again shortly.</p>
+          </div>
+        </section>
+      ) : null}
+
+      <footer className="mx-auto mt-14 max-w-[1400px] border-t border-border px-4 pt-6 text-xs leading-5 text-subtle sm:px-6 lg:px-8">
         Public streams indexed from{" "}
         <a
           href="https://github.com/iptv-org/iptv"

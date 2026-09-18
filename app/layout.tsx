@@ -5,11 +5,11 @@ import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: {
-    default: "Pinflix — Live TV Without Borders",
+    default: "Pinflix — Watch the world live",
     template: "%s · Pinflix",
   },
   description:
-    "Watch public live television from around the world. News, sports, movies, music and local channels in one fast guide.",
+    "Watch public live television from around the world. Find a channel, press play, and watch.",
   applicationName: "Pinflix",
   keywords: ["live TV", "IPTV", "public television", "world TV", "live channels", "Pinflix"],
   icons: {
@@ -21,21 +21,21 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Pinflix",
-    title: "Pinflix — Live TV Without Borders",
-    description: "Explore public live television from around the world in one fast, modern guide.",
+    title: "Pinflix — Watch the world live",
+    description: "The simplest way to find and watch public live television from around the world.",
     url: "/",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Pinflix — Live TV Without Borders",
-    description: "Explore public live television from around the world in one fast, modern guide.",
+    title: "Pinflix — Watch the world live",
+    description: "The simplest way to find and watch public live television from around the world.",
   },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#07070a",
+  themeColor: "#0A0A0B",
   colorScheme: "dark",
 };
 

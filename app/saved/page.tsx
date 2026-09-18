@@ -18,30 +18,28 @@ export default function SavedPage() {
 
   if (!ready) {
     return (
-      <main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Saved</h1>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+    <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <header>
         <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Saved</h1>
-        <p className="mt-2 text-muted">Your saved and recently watched channels.</p>
+        <p className="mt-2 text-muted">Favorites and channels you watched recently.</p>
       </header>
 
       <section className="mt-9">
-        <h2 className="text-xl font-semibold">Saved channels</h2>
+        <h2 className="text-xl font-semibold">Favorites</h2>
         <div className="mt-4">
           {saved.length === 0 ? (
-            <div className="rounded-xl border border-border p-6">
-              <p className="font-medium">No saved channels yet.</p>
-              <p className="mt-1 text-sm text-muted">
-                Save a channel from the player to keep it here.
-              </p>
+            <div className="rounded-xl border border-border bg-surface p-6">
+              <p className="font-medium">No favorites yet.</p>
+              <p className="mt-1 text-sm text-muted">Save a channel from the player to keep it here.</p>
               <Button asChild variant="secondary" className="mt-4">
-                <Link href="/browse">Browse channels</Link>
+                <Link href="/browse">Browse live channels</Link>
               </Button>
             </div>
           ) : (
@@ -53,12 +51,8 @@ export default function SavedPage() {
       {recent.length > 0 ? (
         <section className="mt-10 border-t border-border pt-8">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold">Recently watched</h2>
-            <button
-              type="button"
-              onClick={clearRecent}
-              className="text-sm text-muted hover:text-fg"
-            >
+            <h2 className="text-xl font-semibold">Recently Watched</h2>
+            <button type="button" onClick={clearRecent} className="text-sm text-muted hover:text-fg">
               Clear
             </button>
           </div>
