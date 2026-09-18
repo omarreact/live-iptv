@@ -2,29 +2,21 @@ import { cn } from "@/lib/utils";
 
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" className={cn("size-7", className)} aria-hidden="true">
-      <circle cx="8" cy="16" r="2.2" fill="currentColor" />
-      <path
-        d="M13.2 11.2a7.2 7.2 0 0 1 0 9.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M17.6 7.6a12.4 12.4 0 0 1 0 16.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M22 4a17.6 17.6 0 0 1 0 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
+    <svg
+      viewBox="0 0 40 40"
+      className={cn("size-8 shrink-0", className)}
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="pinflix-mark" x1="7" y1="5" x2="34" y2="36" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#ff6b7d" />
+          <stop offset="0.52" stopColor="#ff304f" />
+          <stop offset="1" stopColor="#7c4dff" />
+        </linearGradient>
+      </defs>
+      <rect x="3" y="3" width="34" height="34" rx="11" fill="url(#pinflix-mark)" />
+      <path d="M16.2 12.6 29 20l-12.8 7.4V12.6Z" fill="white" />
+      <circle cx="30.6" cy="9.8" r="2.5" fill="white" />
     </svg>
   );
 }
