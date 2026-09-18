@@ -13,51 +13,33 @@ export default async function HomePage() {
   const featured = data.featured[0];
 
   return (
-    <main className="pb-16">
+    <main className="pb-14">
       {featured ? (
         <Hero channel={featured} total={data.total} countryCount={data.countryCount} />
       ) : (
-        <section className="mx-auto max-w-[1480px] px-4 py-20 sm:px-6 lg:px-10">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand">Pinflix live</p>
-          <h1 className="mt-3 max-w-2xl text-5xl font-black tracking-[-0.055em] sm:text-6xl">
-            Your world of live TV is reconnecting.
-          </h1>
-          <p className="mt-4 max-w-xl text-muted">
-            The live guide is temporarily unavailable. Please try again shortly.
-          </p>
+        <section className="mx-auto max-w-[1320px] px-4 py-16 sm:px-6 lg:px-8">
+          <h1 className="text-4xl font-bold tracking-[-0.04em]">Pinflix</h1>
+          <p className="mt-3 text-muted">The live channel guide is temporarily unavailable.</p>
         </section>
       )}
 
-      <div className="mx-auto mt-12 max-w-[1480px] space-y-12 sm:mt-14 sm:space-y-14">
-        {data.featured.length > 1 ? (
-          <ChannelRow
-            showAll={false}
-            category={{
-              id: "on-now",
-              name: "On now",
-              description: "Reliable live signals worth opening first",
-              count: data.featured.length,
-            }}
-            channels={data.featured}
-          />
-        ) : null}
-
+      <div className="mx-auto max-w-[1320px] space-y-10 border-t border-border pt-8">
         {data.rows.map((row) => (
           <ChannelRow key={row.category.id} category={row.category} channels={row.channels} />
         ))}
       </div>
 
-      <footer className="mx-auto mt-20 max-w-[1480px] border-t border-border px-4 pt-7 text-xs leading-5 text-subtle sm:px-6 lg:px-10">
-        <span className="font-semibold text-muted">PINFLIX</span> indexes public streams collected by{" "}
+      <footer className="mx-auto mt-14 max-w-[1320px] border-t border-border px-4 pt-6 text-xs leading-5 text-subtle sm:px-6 lg:px-8">
+        Public streams indexed from{" "}
         <a
           href="https://github.com/iptv-org/iptv"
-          className="text-muted underline decoration-border-strong underline-offset-4 transition-colors hover:text-fg"
+          className="underline underline-offset-4 hover:text-fg"
           target="_blank"
           rel="noreferrer"
         >
           iptv-org
         </a>
-        . Availability depends on the broadcaster, your location, and the stream.
+        . Availability varies by broadcaster and location.
       </footer>
     </main>
   );
