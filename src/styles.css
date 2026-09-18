@@ -1,40 +1,38 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #07070a;
-  --color-surface: #0d0d12;
-  --color-elevated: #15151d;
-  --color-panel: #1b1b25;
-  --color-fg: #f8f7f4;
-  --color-muted: #a3a1ad;
-  --color-subtle: #6d6b77;
+  --color-bg: #09090b;
+  --color-surface: #111113;
+  --color-elevated: #18181b;
+  --color-panel: #202024;
+  --color-fg: #f4f4f5;
+  --color-muted: #a1a1aa;
+  --color-subtle: #71717a;
   --color-accent: #ff435d;
   --color-accent-fg: #ffffff;
   --color-brand: #ff435d;
   --color-brand-strong: #ff2045;
-  --color-brand-soft: #2b0c13;
+  --color-brand-soft: #2a1015;
   --color-violet: #8b5cf6;
   --color-live: #ff435d;
   --color-success: #31d79b;
-  --color-border: color-mix(in oklab, var(--color-fg) 9%, transparent);
-  --color-border-strong: color-mix(in oklab, var(--color-fg) 17%, transparent);
+  --color-border: color-mix(in oklab, var(--color-fg) 8%, transparent);
+  --color-border-strong: color-mix(in oklab, var(--color-fg) 16%, transparent);
   --color-ring: #ff5a70;
 
-  --font-sans: "Inter", "SF Pro Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Inter", "SF Pro Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
 
-  --radius-xs: 6px;
-  --radius-sm: 9px;
-  --radius-md: 13px;
-  --radius-lg: 18px;
-  --radius-xl: 26px;
+  --radius-xs: 5px;
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
 
   --shadow-border: 0 0 0 1px color-mix(in oklab, var(--color-fg) 8%, transparent);
-  --shadow-border-hover:
-    0 0 0 1px color-mix(in oklab, var(--color-brand) 46%, transparent),
-    0 16px 42px -24px color-mix(in oklab, var(--color-brand) 46%, transparent);
-  --shadow-card: 0 18px 55px -34px rgba(0, 0, 0, 0.9);
-  --shadow-brand: 0 18px 55px -24px rgba(255, 67, 93, 0.32);
+  --shadow-border-hover: 0 0 0 1px color-mix(in oklab, var(--color-fg) 16%, transparent);
+  --shadow-card: none;
+  --shadow-brand: none;
 }
 
 @layer base {
@@ -55,10 +53,7 @@
   body {
     font-family: var(--font-sans);
     line-height: 1.5;
-    background-image:
-      radial-gradient(circle at 78% -10%, rgba(139, 92, 246, 0.12), transparent 28rem),
-      radial-gradient(circle at 10% 0%, rgba(255, 67, 93, 0.08), transparent 24rem);
-    background-attachment: fixed;
+    background: var(--color-bg);
   }
 
   h1,
@@ -83,8 +78,7 @@
   }
 
   img {
-    outline: 1px solid color-mix(in oklab, var(--color-fg) 8%, transparent);
-    outline-offset: -1px;
+    outline: none;
   }
 
   :focus-visible {
@@ -111,27 +105,16 @@
   display: none;
 }
 
-.brand-grid {
-  background-image:
-    linear-gradient(color-mix(in oklab, var(--color-fg) 4%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklab, var(--color-fg) 4%, transparent) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(to bottom, black, transparent 86%);
-}
-
-.brand-glow {
-  background:
-    radial-gradient(circle at 76% 30%, rgba(139, 92, 246, 0.32), transparent 24rem),
-    radial-gradient(circle at 18% 52%, rgba(255, 67, 93, 0.2), transparent 28rem);
+.brand-grid,
+.brand-glow,
+.brand-text-gradient {
+  background: none;
 }
 
 .brand-text-gradient {
-  background: linear-gradient(110deg, #ffffff 8%, #ffd7dd 56%, #bca9ff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: inherit;
 }
 
 .live-dot {
-  box-shadow: 0 0 0 4px rgba(255, 67, 93, 0.13), 0 0 24px rgba(255, 67, 93, 0.6);
+  box-shadow: none;
 }
