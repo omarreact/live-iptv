@@ -8,6 +8,10 @@ export type ViewerLocation = {
   source: "edge" | "fallback";
 };
 
+type HeaderReader = {
+  get(name: string): string | null;
+};
+
 function clean(value: string | null): string | null {
   if (!value) return null;
   try {
@@ -23,7 +27,10 @@ function numberOrNull(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function resolveViewerLocation(headers: Headers, fallbackCountry = "BD"): ViewerLocation {
+export function resolveViewerLocation(
+  headers: HeaderReader,
+  fallbackCountry = "BD",
+): ViewerLocation {
   const edgeCountry = clean(headers.get("x-vercel-ip-country") ?? headers.get("cf-ipcountry"));
   const country = (edgeCountry ?? fallbackCountry).toUpperCase();
 
