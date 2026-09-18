@@ -13,19 +13,20 @@ The interface follows one path: **find → play → watch**.
 - Quiet automatic source failover
 - Now/Next EPG when a mapped guide is available
 - Mobile-first controls with TV/remote-friendly focus states
+- Local-first TV, Hot Now, and Movies & Series discovery
 
 ## Streaming architecture
 
 ```text
-iptv-org catalog
+iptv-org catalog + IPTV Nexus shards
       ↓
-health-aware source ranking
+multi-provider racing + health-aware source ranking
       ↓
 safe same-origin proxy + automatic failover
       ↓
-iptv-org EPG mapping / XMLTV Now-Next
+local/Hot Now discovery + iptv-org EPG mapping
       ↓
-optional TMDB title enrichment
+optional TMDB + TVmaze entertainment metadata
       ↓
 hls.js / native HLS / mpegts.js
 ```
@@ -45,8 +46,11 @@ The proxy remains catalog-restricted and blocks private/internal hosts. The heal
 - **mpegts.js** for MPEG-TS fallback
 - **Zustand** for device-local favorites and recent channels
 - **iptv-org API** for channels, streams, countries, categories, logos, and guide mappings
+- **IPTV Nexus** for fast country/category shards and alternate discovery
 - **iptv-org EPG/XMLTV** for Now/Next data where available
-- **TMDB** optional metadata enrichment
+- **TMDB** optional entertainment metadata enrichment
+- **TVmaze** no-key entertainment fallback
+- **GDACS** verified disaster-alert source for Hot Now
 - **Passive health/failover service** for source priority, latency observation, and automatic backup selection
 
 ## Optional environment variables
