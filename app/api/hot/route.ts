@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     { country, items },
     {
       headers: {
-        "cache-control": "public, s-maxage=60, stale-while-revalidate=180",
+        "cache-control": "private, max-age=30",
       },
     },
   );
