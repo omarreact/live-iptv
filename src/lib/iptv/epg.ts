@@ -81,7 +81,8 @@ export async function getNowNext(guide: GuideSource, at = new Date()): Promise<N
 
   for (const match of xml.matchAll(programmeRe)) {
     const attrs = match[1] ?? "";
-    if (readAttr(attrs, "channel") !== guide.siteId) continue;
+    const programmeChannel = readAttr(attrs, "channel");
+    if (programmeChannel !== guide.xmltvId && programmeChannel !== guide.siteId) continue;
 
     const start = parseXmltvDate(readAttr(attrs, "start"));
     const end = parseXmltvDate(readAttr(attrs, "stop"));

@@ -27,12 +27,17 @@ export type IptvOrgStream = {
 };
 
 export type IptvOrgGuide = {
-  channel: string;
+  channel: string | null;
   feed?: string | null;
   site: string;
   site_id: string;
+  site_name?: string;
   lang: string;
-  url: string;
+  sources?: Array<{
+    host?: string;
+    url: string;
+    format?: string;
+  }>;
 };
 
 export type IptvOrgChannel = {
@@ -88,6 +93,7 @@ export type Stream = {
 export type GuideSource = {
   site: string;
   siteId: string;
+  xmltvId: string;
   lang: string;
   url: string;
 };

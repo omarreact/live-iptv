@@ -75,12 +75,15 @@ async function buildIptvCatalog(): Promise<IptvCatalog> {
 
   const guideByChannel = new Map<string, GuideSource>();
   for (const guide of guides) {
-    if (!guide.channel || !guide.site_id || !guide.url || guideByChannel.has(guide.channel)) continue;
+    const source =
+      guide.sources?.find((item) => item.format?.toUpperCase() === "XML") ?? guide.sources?.[0];
+    if (!guide.channel || !guide.site_id || !source?.url || guideByChannel.has(guide.channel)) continue;
     guideByChannel.set(guide.channel, {
       site: guide.site,
       siteId: guide.site_id,
+      xmltvId: guide.feed ? `${guide.channel}@${guide.feed}` : guide.channel,
       lang: guide.lang,
-      url: guide.url,
+      url: source.url,
     });
   }
 
