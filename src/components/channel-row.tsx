@@ -6,10 +6,12 @@ export function ChannelRow({
   category,
   channels,
   showAll = true,
+  viewAllHref,
 }: {
   category: Category;
   channels: ChannelPreview[];
   showAll?: boolean;
+  viewAllHref?: string;
 }) {
   if (channels.length === 0) return null;
 
@@ -19,7 +21,7 @@ export function ChannelRow({
         <h2 className="text-xl font-semibold tracking-[-0.02em] sm:text-2xl">{category.name}</h2>
         {showAll ? (
           <Link
-            href={"/category/" + category.id}
+            href={viewAllHref ?? "/category/" + category.id}
             className="shrink-0 text-sm text-muted hover:text-fg"
           >
             View all

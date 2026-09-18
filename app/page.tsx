@@ -1,6 +1,8 @@
 import { Search } from "lucide-react";
 import { unstable_cache } from "next/cache";
 import { ChannelRow } from "@/components/channel-row";
+import { HotNow } from "@/components/hot-now";
+import { LocalChannels } from "@/components/local-channels";
 import { RecentRow } from "@/components/recent-row";
 import { getHomeData } from "@/lib/iptv/provider/iptv-org";
 import type { HomeData } from "@/lib/iptv/types";
@@ -23,7 +25,7 @@ export default async function HomePage() {
         <div className="flex items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">Live TV</h1>
-            <p className="mt-1 text-sm text-muted">Watch the world live.</p>
+            <p className="mt-1 text-sm text-muted">Local first. Watch the world live.</p>
           </div>
           {data.total > 0 ? (
             <p className="hidden text-xs text-subtle sm:block">
@@ -45,6 +47,8 @@ export default async function HomePage() {
       </section>
 
       <div className="mx-auto max-w-[1400px] space-y-9">
+        <HotNow />
+        <LocalChannels />
         <RecentRow />
 
         {data.featured.length > 0 ? (
@@ -63,23 +67,17 @@ export default async function HomePage() {
       {data.total === 0 ? (
         <section className="mx-auto mt-10 max-w-[1400px] px-4 sm:px-6 lg:px-8">
           <div className="rounded-xl border border-border bg-surface p-6">
-            <p className="font-medium">Live channels are temporarily unavailable.</p>
-            <p className="mt-1 text-sm text-muted">Try again shortly.</p>
+            <p className="font-medium">The global guide is temporarily unavailable.</p>
+            <p className="mt-1 text-sm text-muted">
+              Local TV and Hot Now will continue trying independent providers.
+            </p>
           </div>
         </section>
       ) : null}
 
       <footer className="mx-auto mt-14 max-w-[1400px] border-t border-border px-4 pt-6 text-xs leading-5 text-subtle sm:px-6 lg:px-8">
-        Public streams indexed from{" "}
-        <a
-          href="https://github.com/iptv-org/iptv"
-          className="underline underline-offset-4 hover:text-fg"
-          target="_blank"
-          rel="noreferrer"
-        >
-          iptv-org
-        </a>
-        . Availability varies by broadcaster and location.
+        Pinflix combines multiple public channel indexes and health signals. Availability varies by
+        broadcaster and location.
       </footer>
     </main>
   );

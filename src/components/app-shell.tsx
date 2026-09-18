@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bookmark, Compass, House, Search } from "lucide-react";
+import { Bookmark, Compass, Film, House, Search } from "lucide-react";
 import type { ReactNode } from "react";
 import { LogoMark } from "./logo-mark";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Home", icon: House, exact: true },
   { to: "/browse", label: "Browse", icon: Compass, exact: false },
+  { to: "/entertainment", label: "Movies", icon: Film, exact: false },
   { to: "/search", label: "Search", icon: Search, exact: false },
   { to: "/saved", label: "Saved", icon: Bookmark, exact: false },
 ] as const;
@@ -29,7 +30,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
 
             <nav className="hidden items-center gap-5 md:flex">
-              {NAV.filter((item) => item.to === "/" || item.to === "/browse").map((item) => {
+              {NAV.filter(
+                (item) => item.to === "/" || item.to === "/browse" || item.to === "/entertainment",
+              ).map((item) => {
                 const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
                 return (
                   <Link
@@ -49,10 +52,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link
               href="/search"
               className="tv-focus ml-auto hidden h-10 w-full max-w-[420px] items-center gap-2 rounded-xl border border-border bg-surface px-3.5 text-sm text-muted hover:border-border-strong hover:text-fg md:flex"
-              aria-label="Search channels and countries"
+              aria-label="Search Pinflix"
             >
               <Search className="size-4" />
-              <span className="truncate">Search channels, countries…</span>
+              <span className="truncate">Search Pinflix…</span>
             </Link>
 
             <Link
@@ -81,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {!watching ? (
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg/96 backdrop-blur-sm md:hidden">
-          <ul className="grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
+          <ul className="grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
             {NAV.map((item) => {
               const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
               const Icon = item.icon;
@@ -90,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Link
                     href={item.to}
                     className={cn(
-                      "flex h-14 flex-col items-center justify-center gap-1 text-[11px] transition-colors",
+                      "flex h-14 flex-col items-center justify-center gap-1 text-[10px] transition-colors",
                       active ? "font-medium text-brand" : "text-muted",
                     )}
                   >
