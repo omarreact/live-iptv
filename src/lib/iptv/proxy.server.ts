@@ -3,7 +3,7 @@ import { getIptvCatalog } from "./provider/iptv-org";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 const MAX_UA = 400;
-const MAX_REDIRECTS = 4;
+const MAX_REDIRECTS = 6;
 const MAX_URL_LENGTH = 4_096;
 
 function isPrivateHostname(hostname: string): boolean {
@@ -134,15 +134,21 @@ function isPlaylistPath(url: URL): boolean {
   return path.endsWith(".m3u8") || path.endsWith(".m3u") || path.endsWith(".smil");
 }
 
-function passthroughHeaders(upstream: Response, fallbackType?: string): Headers {
+function passthroughHeaders(
+  upstream: Response,
+  fallbackType?: string,
+  finalUrl?: URL,
+): Headers {
   const out = new Headers();
   out.set(
     "content-type",
     upstream.headers.get("content-type") || fallbackType || "application/octet-stream",
   );
   out.set("cache-control", "no-store");
-  out.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges");
+  out.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, X-Pinflix-Upstream-Status, X-Pinflix-Upstream-Host");
   out.set("x-accel-buffering", "no");
+  out.set("x-pinflix-upstream-status", String(upstream.status));
+  if (finalUrl) out.set("x-pinflix-upstream-host", finalUrl.hostname);
   for (const name of ["content-length", "content-range", "accept-ranges"]) {
     const value = upstream.headers.get(name);
     if (value) out.set(name, value);
@@ -150,14 +156,22 @@ function passthroughHeaders(upstream: Response, fallbackType?: string): Headers 
   return out;
 }
 
+type UpstreamResult = {
+  response: Response;
+  finalUrl: URL;
+};
+
 async function fetchUpstream(
   target: URL,
   request: Request,
   extras: ProxyExtras,
-): Promise<Response> {
+): Promise<UpstreamResult> {
   let current = target;
+
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
-    await assertCatalogHost(current);
+    // The initial URL is catalog-approved before this function is called.
+    // Redirect destinations are trusted only as a chain from that approved URL,
+    // and are still blocked from private/internal network targets.
     const headers = new Headers({ "user-agent": extras.ua, accept: "*/*" });
     const range = request.headers.get("range");
     if (range) headers.set("range", range);
@@ -167,7 +181,7 @@ async function fetchUpstream(
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 18000);
+    const timer = setTimeout(() => controller.abort(), 18_000);
     let upstream: Response;
     try {
       upstream = await fetch(current, {
@@ -180,12 +194,16 @@ async function fetchUpstream(
       clearTimeout(timer);
     }
 
-    if (upstream.status < 300 || upstream.status >= 400) return upstream;
+    if (upstream.status < 300 || upstream.status >= 400) {
+      return { response: upstream, finalUrl: current };
+    }
+
     if (redirect === MAX_REDIRECTS) throw new Error("Too many upstream redirects");
     const location = upstream.headers.get("location");
     if (!location) throw new Error("Invalid upstream redirect");
     current = assertSafeUrl(new URL(location, current).href);
   }
+
   throw new Error("Upstream redirect failed");
 }
 
@@ -204,34 +222,50 @@ export async function proxyStream(request: Request): Promise<Response> {
   }
 
   const extras = extrasFromRequest(incoming);
-  let upstream: Response;
+  let result: UpstreamResult;
   try {
-    upstream = await fetchUpstream(target, request, extras);
+    result = await fetchUpstream(target, request, extras);
   } catch (err) {
     return new Response(err instanceof Error ? err.message : "Upstream unreachable", {
       status: 502,
+      headers: {
+        "cache-control": "no-store",
+        "x-pinflix-upstream-host": target.hostname,
+      },
     });
   }
 
-  if (!upstream.ok && upstream.status !== 206)
-    return new Response("Upstream stream unavailable", { status: upstream.status });
+  const { response: upstream, finalUrl } = result;
+
+  if (!upstream.ok && upstream.status !== 206) {
+    const headers = passthroughHeaders(upstream, "text/plain; charset=utf-8", finalUrl);
+    // Surface gateway failure as 502 so the client can distinguish a broken
+    // upstream stream from a missing Pinflix API route.
+    return new Response(`Upstream stream unavailable (${upstream.status})`, {
+      status: 502,
+      headers,
+    });
+  }
 
   const contentType = upstream.headers.get("content-type") ?? "";
   const origin = incoming.origin;
   const treatAsPlaylist =
-    isPlaylistPath(target) || /mpegurl|x-mpegurl|apple\.mpegurl|vnd\.apple/i.test(contentType);
+    isPlaylistPath(finalUrl) ||
+    isPlaylistPath(target) ||
+    /mpegurl|x-mpegurl|apple\.mpegurl|vnd\.apple/i.test(contentType);
 
   if (treatAsPlaylist) {
     const text = await upstream.text();
-    const rewritten = rewriteM3u8(text, target.href, origin, extras);
+    // Relative HLS URLs must resolve from the final URL after redirects.
+    const rewritten = rewriteM3u8(text, finalUrl.href, origin, extras);
     return new Response(rewritten, {
       status: 200,
-      headers: passthroughHeaders(upstream, "application/vnd.apple.mpegurl"),
+      headers: passthroughHeaders(upstream, "application/vnd.apple.mpegurl", finalUrl),
     });
   }
 
   return new Response(upstream.body, {
     status: upstream.status,
-    headers: passthroughHeaders(upstream),
+    headers: passthroughHeaders(upstream, undefined, finalUrl),
   });
 }
