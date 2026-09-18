@@ -49,7 +49,7 @@ export function toUiStream(raw: IptvOrgStream, channelId: string): Stream {
     geoBlocked: /geo[- ]?blocked/i.test(label),
     not247: /not\s*24\s*\/\s*7/i.test(label),
     userAgent: raw.user_agent ?? null,
-    referrer: raw.referrer ?? null,
+    referrer: raw.referrer ?? raw.http_referrer ?? null,
   };
 }
 
