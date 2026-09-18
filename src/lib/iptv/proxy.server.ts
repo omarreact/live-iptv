@@ -6,6 +6,9 @@ const UA =
 const MAX_UA = 400;
 const MAX_REDIRECTS = 6;
 const MAX_URL_LENGTH = 4_096;
+const ALLOWED_HOSTS_TTL_MS = 60 * 60_000;
+
+let allowedHostsCache: { expiresAt: number; hosts: Set<string> } | null = null;
 
 function isPrivateHostname(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
@@ -60,6 +63,10 @@ export function assertSafeUrl(raw: string): URL {
 }
 
 async function getAllowedHosts(): Promise<Set<string>> {
+  if (allowedHostsCache && allowedHostsCache.expiresAt > Date.now()) {
+    return allowedHostsCache.hosts;
+  }
+
   const catalog = await getIptvCatalog();
   const hosts = new Set<string>();
   for (const channel of catalog.channels) {
@@ -72,6 +79,11 @@ async function getAllowedHosts(): Promise<Set<string>> {
       }
     }
   }
+
+  allowedHostsCache = {
+    expiresAt: Date.now() + ALLOWED_HOSTS_TTL_MS,
+    hosts,
+  };
   return hosts;
 }
 
