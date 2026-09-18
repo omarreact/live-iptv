@@ -65,6 +65,7 @@ async function sportsItems(country: string): Promise<HotItem[]> {
 }
 
 type GdacsRow = Record<string, unknown>;
+type GdacsPayload = GdacsRow[] | { data?: GdacsRow[]; aaData?: GdacsRow[] } | null;
 
 function readString(row: GdacsRow, keys: string[]): string {
   for (const key of keys) {
@@ -72,6 +73,14 @@ function readString(row: GdacsRow, keys: string[]): string {
     if (typeof value === "string" && value.trim()) return value.trim();
   }
   return "";
+}
+
+function rowsFromGdacsPayload(payload: GdacsPayload): GdacsRow[] {
+  if (Array.isArray(payload)) return payload;
+  if (!payload) return [];
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.aaData)) return payload.aaData;
+  return [];
 }
 
 async function alertItems(country: string): Promise<HotItem[]> {
@@ -83,18 +92,8 @@ async function alertItems(country: string): Promise<HotItem[]> {
 
   if (!response?.ok) return [];
 
-  const payload = (await response.json().catch(() => null)) as
-    | GdacsRow[]
-    | { data?: GdacsRow[]; aaData?: GdacsRow[] }
-    | null;
-
-  const rows = Array.isArray(payload)
-    ? payload
-    : Array.isArray(payload?.data)
-      ? payload.data
-      : Array.isArray(payload?.aaData)
-        ? payload.aaData
-        : [];
+  const payload = (await response.json().catch(() => null)) as GdacsPayload;
+  const rows = rowsFromGdacsPayload(payload);
 
   const label = countryName(country).toLowerCase();
   const code = country.toLowerCase();
