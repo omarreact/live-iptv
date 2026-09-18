@@ -87,33 +87,48 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       userAgent: activeStream.userAgent,
       referrer: activeStream.referrer,
     };
-    const src = proxiedStreamUrl(activeChannel);
+    const src = transport === "proxy" ? proxiedStreamUrl(activeChannel) : activeStream.url;
     const kind = streamKind(activeStream.url);
     const hasNextStream = (channel.streams?.length ?? 0) > streamIndex + 1;
+
+    function fail(message?: string, status?: number) {
+      if (cancelled) return;
+
+      // A 4xx from the upstream itself usually means this source is stale.
+      // Prefer the next catalog source when one exists.
+      if (transport === "proxy" && status && status >= 400 && status < 500 && hasNextStream) {
+        setTransport("proxy");
+        setStreamIndex((n) => n + 1);
+        return;
+      }
+
+      // A proxy/gateway failure can be specific to Vercel's network path.
+      // Give the same public stream one direct browser attempt before abandoning it.
+      if (transport === "proxy") {
+        setTransport("direct");
+        return;
+      }
+
+      if (hasNextStream) {
+        setTransport("proxy");
+        setStreamIndex((n) => n + 1);
+        return;
+      }
+
+      setStarted(false);
+      setError(message ?? "This broadcast is offline, geo-blocked, or not reachable from here.");
+    }
+
     const onPlaying = () => {
       setPlaying(true);
       setStarted(true);
       setError(null);
     };
     const onPause = () => setPlaying(false);
-    const onError = () => {
-      if (!cancelled) {
-        setStarted(false);
-        setError("This broadcast is offline, geo-blocked, or not reachable from here.");
-      }
-    };
+    const onError = () => fail();
     video.addEventListener("playing", onPlaying);
     video.addEventListener("pause", onPause);
     video.addEventListener("error", onError);
-    function fail(message?: string) {
-      if (cancelled) return;
-      if (hasNextStream) {
-        setStreamIndex((n) => n + 1);
-        return;
-      }
-      setStarted(false);
-      setError(message ?? "This broadcast is offline, geo-blocked, or not reachable from here.");
-    }
     async function attachHls(onFatal?: () => void) {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
       if (native) {
@@ -147,12 +162,13 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
         video.play().catch(() => {});
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        const d = data as { fatal?: boolean };
+        const d = data as { fatal?: boolean; response?: { code?: number } };
         if (!d?.fatal) return;
+        const status = d.response?.code;
         hls.destroy();
         engineRef.current = null;
         if (onFatal) onFatal();
-        else fail();
+        else fail(undefined, status);
       });
     }
     async function attachMpegTs() {
@@ -214,7 +230,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       video.removeAttribute("src");
       video.load();
     };
-  }, [channel, revealChrome, retry, streamIndex]);
+  }, [channel, revealChrome, retry, streamIndex, transport]);
 
   useEffect(() => {
     const onFs = () => setFullscreen(Boolean(document.fullscreenElement));
@@ -285,8 +301,15 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           onClick={togglePlay}
         />
         {!started && !error ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="size-10 animate-spin rounded-full border-2 border-border-strong border-t-fg" />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+            <div className="size-10 animate-spin rounded-full border-2 border-border-strong border-t-brand" />
+            <p className="text-xs font-medium text-muted">
+              {transport === "direct"
+                ? "Trying the direct signal…"
+                : streamIndex > 0
+                  ? "Trying a backup stream…"
+                  : "Connecting to live TV…"}
+            </p>
           </div>
         ) : null}
         {error ? (
@@ -298,6 +321,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
                 <Button
                   variant="secondary"
                   onClick={() => {
+                    setTransport("proxy");
                     setStreamIndex(0);
                     setRetry((n) => n + 1);
                   }}
