@@ -21,6 +21,7 @@ import { proxiedStreamUrl, streamKind } from "@/lib/iptv/stream";
 import { useLibrary } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { ChannelCard } from "./channel-card";
+import { StreamLoader } from "./loading";
 import { Button } from "./ui/button";
 
 type Destroyable = { destroy: () => void };
@@ -354,16 +355,13 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           onClick={togglePlay}
         />
         {!started && !error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <div className="size-10 animate-spin rounded-full border-2 border-border-strong border-t-brand" />
-            <p className="text-xs font-medium text-muted">
-              {transport === "direct"
-                ? "Trying another source…"
-                : streamIndex > 0
-                  ? "Trying another source…"
-                  : "Connecting…"}
-            </p>
-          </div>
+          <StreamLoader
+            label={
+              transport === "direct" || streamIndex > 0
+                ? "Switching to a healthier source"
+                : "Connecting to live signal"
+            }
+          />
         ) : null}
         {error ? (
           <div className="absolute inset-0 flex items-center justify-center p-6">

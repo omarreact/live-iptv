@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ChannelCard } from "@/components/channel-card";
 import type { ChannelPreview } from "@/lib/iptv/types";
+import { ChannelCardsSkeletonRow } from "@/components/loading";
 
 type LocalPayload = {
   location?: {
@@ -71,13 +72,8 @@ export function LocalChannels() {
           ))}
         </div>
       ) : (
-        <div className="mt-4 flex gap-3.5 overflow-hidden px-4 sm:px-6 lg:px-8" aria-hidden="true">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="w-40 shrink-0 sm:w-44">
-              <div className="aspect-video animate-pulse rounded-xl border border-border bg-surface" />
-              <div className="mt-2.5 h-4 w-24 animate-pulse rounded bg-surface" />
-            </div>
-          ))}
+        <div className="mt-4 px-4 sm:px-6 lg:px-8">
+          <ChannelCardsSkeletonRow count={7} />
         </div>
       )}
     </section>

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ChannelPreview } from "@/lib/iptv/types";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,13 @@ export function ChannelCard({
   className?: string;
 }) {
   const [broken, setBroken] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const showLogo = Boolean(channel.logo) && !broken;
+
+  useEffect(() => {
+    setBroken(false);
+    setLoaded(false);
+  }, [channel.logo]);
 
   return (
     <Link
@@ -41,6 +47,7 @@ export function ChannelCard({
           "transition-[border-color,background-color,transform] duration-150 ease-out",
           "group-hover:-translate-y-px group-hover:border-border-strong group-hover:bg-elevated",
           "group-focus-visible:border-brand",
+          showLogo && !loaded && "pinflix-shimmer",
         )}
       >
         {showLogo ? (
@@ -52,8 +59,15 @@ export function ChannelCard({
             unoptimized={/\.(?:svg|gif)(?:\?|$)/i.test(channel.logo)}
             loading="lazy"
             referrerPolicy="no-referrer"
-            onError={() => setBroken(true)}
-            className="object-contain p-5"
+            onLoad={() => setLoaded(true)}
+            onError={() => {
+              setBroken(true);
+              setLoaded(true);
+            }}
+            className={cn(
+              "object-contain p-5 transition-[opacity,transform] duration-300 ease-out",
+              loaded ? "pinflix-artwork-ready" : "pinflix-artwork-loading",
+            )}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-2xl font-semibold text-muted">

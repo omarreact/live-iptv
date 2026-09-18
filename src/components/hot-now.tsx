@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Flame, Newspaper, Radio, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { HotItem } from "@/lib/hot";
+import { HotNowSkeleton } from "@/components/loading";
 
 function Icon({ kind }: { kind: HotItem["kind"] }) {
   if (kind === "alert") return <TriangleAlert className="size-4" />;
@@ -75,7 +76,7 @@ export function HotNow() {
           })}
         </div>
       ) : (
-        <div className="h-[66px] animate-pulse rounded-xl border border-border bg-surface" />
+        <HotNowSkeleton />
       )}
     </section>
   );

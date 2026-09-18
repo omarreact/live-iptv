@@ -53,7 +53,7 @@ export default async function EntertainmentPage() {
                 rel="noreferrer"
                 className="group tv-focus rounded-xl"
               >
-                <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface transition-colors group-hover:border-border-strong">
+                <div className="pinflix-shimmer relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface transition-colors group-hover:border-border-strong">
                   {item.image ? (
                     <Image
                       src={item.image}

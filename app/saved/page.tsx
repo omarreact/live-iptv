@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import { ChannelGrid } from "@/components/channel-card";
 import { Button } from "@/components/ui/button";
+import { SavedLoadingState } from "@/components/loading";
 import { useLibrary } from "@/lib/store";
 
 export default function SavedPage() {
@@ -17,11 +18,7 @@ export default function SavedPage() {
   );
 
   if (!ready) {
-    return (
-      <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Saved</h1>
-      </main>
-    );
+    return <SavedLoadingState />;
   }
 
   return (

@@ -5,6 +5,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChannelGrid } from "@/components/channel-card";
 import { Input } from "@/components/ui/input";
+import { CatalogLoading, SearchLoadingState } from "@/components/loading";
 import type { ChannelPreview } from "@/lib/iptv/types";
 
 export default function SearchPage() {
@@ -16,12 +17,7 @@ export default function SearchPage() {
 }
 
 function SearchLoading() {
-  return (
-    <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Search</h1>
-      <div className="mt-5 h-12 max-w-2xl rounded-xl bg-surface" />
-    </main>
-  );
+  return <CatalogLoading label="Opening global search" />;
 }
 
 function SearchPageInner() {
@@ -114,7 +110,7 @@ function SearchPageInner() {
         {error ? (
           <p className="text-sm text-brand" role="alert">{error}</p>
         ) : loading ? (
-          <p className="text-sm text-muted">Searching…</p>
+          <SearchLoadingState />
         ) : q.trim().length < 2 ? (
           <p className="text-sm text-subtle">Type at least two letters.</p>
         ) : results.length === 0 ? (
