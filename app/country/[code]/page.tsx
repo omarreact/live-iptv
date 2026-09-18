@@ -55,12 +55,9 @@ export default async function CountryPage({
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8">
-      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">
-        {country?.flag ? `${country.flag} ` : ""}
-        Country
-      </p>
-      <h1 className="mt-2 font-display text-4xl tracking-tight">
+    <main className="mx-auto max-w-[1320px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
+        {country?.flag ? <span className="mr-2">{country.flag}</span> : null}
         {title}
         {categoryName ? <span className="text-muted"> · {categoryName}</span> : null}
       </h1>
@@ -70,7 +67,7 @@ export default async function CountryPage({
       </p>
 
       {categoryIds.length > 0 ? (
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2">
           <FilterChip
             href={href({ category: null })}
             active={!activeCategory}
@@ -90,7 +87,7 @@ export default async function CountryPage({
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted">Sort</span>
+        <span className="mr-1 text-sm text-muted">Sort:</span>
         {SORT_MODES.map((mode) => (
           <FilterChip
             key={mode}
@@ -131,16 +128,15 @@ export default async function CountryPage({
         </nav>
       ) : null}
 
-      <div className="mt-8 flex flex-wrap gap-3">
-        <Button variant="ghost" asChild>
-          <Link href="/browse">All countries</Link>
-        </Button>
+      <div className="mt-8 border-t border-border pt-6">
+        <Link href="/browse" className="text-sm text-muted hover:text-fg">← Back to browse</Link>
         {activeCategory ? (
-          <Button variant="secondary" asChild>
-            <Link href={`/category/${activeCategory}?country=${code.toLowerCase()}`}>
-              Open {categoryName} worldwide
-            </Link>
-          </Button>
+          <Link
+            href={`/category/${activeCategory}?country=${code.toLowerCase()}`}
+            className="ml-4 text-sm text-muted hover:text-fg"
+          >
+            View {categoryName} worldwide
+          </Link>
         ) : null}
       </div>
     </main>
@@ -162,10 +158,10 @@ function FilterChip({
     <Link
       href={href}
       className={cn(
-        "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm transition-colors",
+        "inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm transition-colors",
         active
-          ? "bg-accent text-accent-fg"
-          : "bg-elevated text-muted hover:text-fg shadow-[var(--shadow-border)]",
+          ? "border-brand/40 bg-brand/10 text-fg"
+          : "border-border text-muted hover:border-border-strong hover:text-fg",
       )}
     >
       {label}
