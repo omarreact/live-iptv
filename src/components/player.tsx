@@ -43,7 +43,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const [chromeVisible, setChromeVisible] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [streamIndex, setStreamIndex] = useState(0);
+  const [streamIndex, setStreamIndex] = useState(0);\n  const [transport, setTransport] = useState<"proxy" | "direct">("proxy");
 
   useEffect(() => {
     addRecent(channelPreview);
