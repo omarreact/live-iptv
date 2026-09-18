@@ -4,7 +4,7 @@ import { RecentRow } from "@/components/recent-row";
 import { getHomeData } from "@/lib/iptv/provider/iptv-org";
 import type { HomeData } from "@/lib/iptv/types";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 600;
 
 export default async function HomePage() {
   const data: HomeData = await getHomeData().catch((error: unknown) => {
