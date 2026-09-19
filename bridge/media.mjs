@@ -444,6 +444,7 @@ async function listSources(req, res) {
       id: source.id,
       name: source.name,
       description: source.description,
+      adapter: source.adapter,
     })),
   });
 }
