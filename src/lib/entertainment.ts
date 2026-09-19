@@ -5,6 +5,7 @@ export type EntertainmentTitle = {
   title: string;
   overview: string;
   image: string | null;
+  backdrop: string | null;
   year: string | null;
   rating: number | null;
   href: string;
@@ -17,6 +18,7 @@ type TmdbItem = {
   name?: string;
   overview?: string;
   poster_path?: string | null;
+  backdrop_path?: string | null;
   release_date?: string;
   first_air_date?: string;
   vote_average?: number;
@@ -77,6 +79,7 @@ async function getTmdbTrending(): Promise<EntertainmentTitle[]> {
         title: item.title ?? item.name ?? "Untitled",
         overview: item.overview ?? "",
         image: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
+        backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
         year: date?.slice(0, 4) ?? null,
         rating: typeof item.vote_average === "number" ? item.vote_average : null,
         href: `https://www.themoviedb.org/${mediaType}/${item.id}`,
@@ -104,6 +107,7 @@ async function getTvMazePopular(): Promise<EntertainmentTitle[]> {
       title: show.name ?? "Untitled",
       overview: (show.summary ?? "").replace(/<[^>]+>/g, "").trim(),
       image: show.image?.original ?? show.image?.medium ?? null,
+      backdrop: null,
       year: show.premiered?.slice(0, 4) ?? null,
       rating: show.rating?.average ?? null,
       href: show.url ?? `https://www.tvmaze.com/shows/${show.id}`,
