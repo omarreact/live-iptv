@@ -26,6 +26,17 @@ import { Button } from "./ui/button";
 
 type Destroyable = { destroy: () => void };
 
+type MobileVideoElement = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+  webkitExitFullscreen?: () => void;
+  webkitDisplayingFullscreen?: boolean;
+};
+
+type LockableOrientation = ScreenOrientation & {
+  lock?: (orientation: "landscape") => Promise<void>;
+  unlock?: () => void;
+};
+
 type EpgProgram = { title: string; start: string; end: string };
 type EpgPayload = {
   now: EpgProgram | null;
@@ -275,11 +286,60 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     };
   }, [channel, revealChrome, retry, streamIndex, transport]);
 
-  useEffect(() => {
-    const onFs = () => setFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
+  const isMobileLike = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
   }, []);
+
+  const lockLandscape = useCallback(async () => {
+    if (!isMobileLike()) return;
+    const orientation = screen.orientation as LockableOrientation | undefined;
+    if (!orientation?.lock) return;
+    try {
+      await orientation.lock("landscape");
+    } catch {
+      // Some browsers expose Screen Orientation but still disallow locking.
+    }
+  }, [isMobileLike]);
+
+  const unlockOrientation = useCallback(() => {
+    const orientation = screen.orientation as LockableOrientation | undefined;
+    try {
+      orientation?.unlock?.();
+    } catch {
+      // Ignore browsers that do not permit explicit unlocks.
+    }
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current as MobileVideoElement | null;
+
+    const onFs = () => {
+      const active = Boolean(document.fullscreenElement);
+      setFullscreen(active);
+      if (active) void lockLandscape();
+      else unlockOrientation();
+    };
+    const onWebkitBegin = () => {
+      setFullscreen(true);
+      void lockLandscape();
+    };
+    const onWebkitEnd = () => {
+      setFullscreen(false);
+      unlockOrientation();
+    };
+
+    document.addEventListener("fullscreenchange", onFs);
+    video?.addEventListener("webkitbeginfullscreen", onWebkitBegin as EventListener);
+    video?.addEventListener("webkitendfullscreen", onWebkitEnd as EventListener);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      video?.removeEventListener("webkitbeginfullscreen", onWebkitBegin as EventListener);
+      video?.removeEventListener("webkitendfullscreen", onWebkitEnd as EventListener);
+      unlockOrientation();
+    };
+  }, [lockLandscape, unlockOrientation]);
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -296,10 +356,38 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   }, [revealChrome]);
   const toggleFs = useCallback(async () => {
     const el = wrapRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else await el.requestFullscreen().catch(() => {});
-  }, []);
+    const video = videoRef.current as MobileVideoElement | null;
+    if (!el || !video) return;
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => {});
+      unlockOrientation();
+      return;
+    }
+
+    if (video.webkitDisplayingFullscreen) {
+      video.webkitExitFullscreen?.();
+      unlockOrientation();
+      return;
+    }
+
+    try {
+      await el.requestFullscreen();
+      await lockLandscape();
+      return;
+    } catch {
+      // iPhone Safari may only offer native video fullscreen.
+    }
+
+    if (video.webkitEnterFullscreen) {
+      try {
+        video.webkitEnterFullscreen();
+        await lockLandscape();
+      } catch {
+        // Keep playback inline when native fullscreen is unavailable.
+      }
+    }
+  }, [lockLandscape, unlockOrientation]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
