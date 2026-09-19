@@ -29,5 +29,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Check bridge syntax
+        run: |
+          node --check bridge/server.mjs
+          node --check bridge/media.mjs
+          node --check bridge/provider-adapters.mjs
+
       - name: Build
         run: npm run build
