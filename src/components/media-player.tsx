@@ -75,8 +75,9 @@ export function MediaPlayer({ source, path, title }: { source: string; path: str
   }, [source, path, retry]);
 
   useEffect(() => {
+    if (!videoRef.current || !resolved) return;
     const video = videoRef.current;
-    if (!video || !resolved) return;
+    const media = resolved;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -96,7 +97,7 @@ export function MediaPlayer({ source, path, title }: { source: string; path: str
     const fail = () => {
       if (cancelled) return;
       cleanupEngine();
-      if (mode === "direct" && resolved.transcodeUrl) {
+      if (mode === "direct" && media.transcodeUrl) {
         setMode("transcode");
         return;
       }
@@ -167,16 +168,16 @@ export function MediaPlayer({ source, path, title }: { source: string; path: str
         video.removeAttribute("src");
         video.load();
         if (mode === "transcode") {
-          await attachTranscode(resolved.transcodeUrl);
+          await attachTranscode(media.transcodeUrl);
           return;
         }
-        if (resolved.kind === "hls") {
-          await attachHls(resolved.url);
+        if (media.kind === "hls") {
+          await attachHls(media.url);
           return;
         }
-        video.src = resolved.url;
+        video.src = media.url;
         await video.play().catch(() => {
-          if (!resolved.directPlayable) fail();
+          if (!media.directPlayable) fail();
         });
       } catch {
         fail();
