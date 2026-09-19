@@ -34,6 +34,7 @@ export function ChannelCard({
   return (
     <Link
       href={"/watch/" + channel.id}
+      prefetch={false}
       aria-label={`Watch ${channel.shortName}`}
       className={cn(
         "group tv-focus flex shrink-0 flex-col gap-2.5 rounded-xl outline-none",

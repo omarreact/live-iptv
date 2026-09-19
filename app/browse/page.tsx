@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { BangladeshPrivateRail } from "@/components/private-channel-rail";
 import { getGuideSummary } from "@/lib/iptv/provider/iptv-org";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,8 @@ export default async function BrowsePage() {
           className="h-11 w-full rounded-xl border border-border bg-surface pl-11 pr-4 text-sm outline-none transition-colors placeholder:text-subtle hover:border-border-strong focus:border-brand focus:ring-2 focus:ring-brand/15"
         />
       </form>
+
+      <BangladeshPrivateRail className="mt-9" />
 
       <section className="mt-9">
         <div className="flex items-end justify-between gap-4">

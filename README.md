@@ -52,6 +52,7 @@ The proxy remains catalog-restricted and blocks private/internal hosts. The heal
 - **TVmaze** no-key entertainment fallback
 - **GDACS** verified disaster-alert source for Hot Now
 - **Passive health/failover service** for source priority, latency observation, and automatic backup selection
+- **Optional Bangladesh private-network bridge** for authorized ISP/private HLS sources without exposing upstream URLs or tokens
 
 ## Optional environment variables
 
@@ -60,9 +61,14 @@ NEXT_PUBLIC_SITE_URL=https://iptv.pincodeit.com
 TMDB_API_READ_TOKEN=your_tmdb_read_token
 # or legacy:
 TMDB_API_KEY=your_tmdb_api_key
+PINFLIX_BD_BRIDGE_URL=https://your-bridge.example.com
+PINFLIX_BD_BRIDGE_SECRET=use-a-long-random-secret
+PINFLIX_PRIVATE_PROXY_KEY=use-another-long-random-secret
 ```
 
 TMDB is optional. Pinflix builds and runs without a TMDB credential.
+
+The Bangladesh bridge is also optional. When its URL/secret are absent, private-channel entries are not exposed in discovery. See `bridge/README.md` for the private-network bridge setup.
 
 ## Develop
 

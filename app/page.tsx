@@ -47,8 +47,8 @@ export default async function HomePage() {
       </section>
 
       <div className="mx-auto max-w-[1400px] space-y-9">
-        <HotNow />
         <LocalChannels />
+        <HotNow />
         <RecentRow />
 
         {data.featured.length > 0 ? (

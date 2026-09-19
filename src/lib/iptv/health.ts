@@ -144,6 +144,13 @@ export function streamHealthScore(stream: Stream): number {
   if (stream.geoBlocked) score -= 40;
   if (stream.not247) score -= 12;
 
+  if (stream.url.startsWith("pinflix-private://")) {
+    score += 28;
+    score += qualityPoints(stream.quality);
+    score += observedAdjustment(stream.url);
+    return score;
+  }
+
   try {
     const url = new URL(stream.url);
     const rawIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname);
