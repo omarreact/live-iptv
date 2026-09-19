@@ -2,6 +2,7 @@ export type MediaSourceSummary = {
   id: string;
   name: string;
   description: string;
+  adapter?: string;
 };
 
 export type MediaItem = {
