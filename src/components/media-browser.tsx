@@ -65,8 +65,21 @@ export function MediaBrowser() {
     let cancelled = false;
     fetch("/api/media/sources", { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("sources unavailable");
-        return response.json() as Promise<{ sources?: MediaSourceSummary[] }>;
+        const payload = (await response.json().catch(() => ({}))) as {
+          sources?: MediaSourceSummary[];
+          code?: string;
+          error?: string;
+        };
+        if (!response.ok) {
+          const message =
+            payload.code === "BRIDGE_NOT_CONFIGURED"
+              ? "The Pinflix network bridge is not configured in production yet."
+              : payload.code === "BRIDGE_UNAVAILABLE"
+                ? "The Pinflix network bridge is configured but currently unreachable."
+                : "Network media sources are currently unavailable.";
+          throw new Error(message);
+        }
+        return payload;
       })
       .then((payload) => {
         if (cancelled) return;
@@ -75,8 +88,11 @@ export function MediaBrowser() {
         if (next[0]) void load(next[0].id, "");
         else setState("idle");
       })
-      .catch(() => {
-        if (!cancelled) setState("idle");
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        setSources([]);
+        setState("error");
+        setError(reason instanceof Error ? reason.message : "Network media sources are currently unavailable.");
       });
     return () => {
       cancelled = true;
