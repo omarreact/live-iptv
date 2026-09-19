@@ -17,6 +17,14 @@ import { cn } from "@/lib/utils";
 
 type SourceState = "idle" | "loading" | "online" | "error";
 
+type MediaBrowserProps = {
+  preferredSourceId?: string;
+  sourceIds?: string[];
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+};
+
 function parentPath(path: string): string {
   const clean = path.replace(/[?#].*$/, "").replace(/\/+$/, "");
   const parts = clean.split("/").filter(Boolean);
@@ -32,7 +40,13 @@ function prettyTitle(name: string): string {
     .trim();
 }
 
-export function MediaBrowser() {
+export function MediaBrowser({
+  preferredSourceId,
+  sourceIds,
+  eyebrow = "Network cinema",
+  title = "Your reachable media servers, inside Pinflix",
+  description = "Browse media exposed by your configured bridge. Pinflix keeps private server addresses and bridge credentials away from the browser.",
+}: MediaBrowserProps = {}) {
   const router = useRouter();
   const [sources, setSources] = useState<MediaSourceSummary[]>([]);
   const [activeSource, setActiveSource] = useState<string>("");
@@ -40,6 +54,11 @@ export function MediaBrowser() {
   const [state, setState] = useState<SourceState>("loading");
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const allowedSourceIds = useMemo(
+    () => (sourceIds?.length ? new Set(sourceIds.map((id) => id.trim()).filter(Boolean)) : null),
+    [sourceIds],
+  );
 
   const load = useCallback(async (source: string, path = "") => {
     setState("loading");
@@ -83,10 +102,29 @@ export function MediaBrowser() {
       })
       .then((payload) => {
         if (cancelled) return;
-        const next = payload.sources ?? [];
+        const discovered = payload.sources ?? [];
+        const next = allowedSourceIds
+          ? discovered.filter((source) => allowedSourceIds.has(source.id))
+          : discovered;
+
         setSources(next);
-        if (next[0]) void load(next[0].id, "");
-        else setState("idle");
+
+        const preferred = preferredSourceId
+          ? next.find((source) => source.id === preferredSourceId)
+          : undefined;
+        const initial = preferred ?? next[0];
+
+        if (initial) {
+          void load(initial.id, "");
+          return;
+        }
+
+        if (preferredSourceId || allowedSourceIds) {
+          setState("error");
+          setError("CineplexBD is not available from the configured Pinflix bridge yet.");
+        } else {
+          setState("idle");
+        }
       })
       .catch((reason: unknown) => {
         if (cancelled) return;
@@ -97,7 +135,7 @@ export function MediaBrowser() {
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [allowedSourceIds, load, preferredSourceId]);
 
   const filtered = useMemo(() => {
     const items = browse?.items ?? [];
@@ -126,14 +164,10 @@ export function MediaBrowser() {
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 text-brand">
               <Wifi className="size-4" />
-              <span className="text-xs font-semibold uppercase tracking-[0.18em]">Network cinema</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.18em]">{eyebrow}</span>
             </div>
-            <h2 className="mt-2 text-2xl font-bold tracking-[-0.03em] sm:text-3xl">
-              Your reachable media servers, inside Pinflix
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Browse media exposed by your configured bridge. Pinflix keeps private server addresses and bridge credentials away from the browser.
-            </p>
+            <h2 className="mt-2 text-2xl font-bold tracking-[-0.03em] sm:text-3xl">{title}</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
           </div>
 
           <div className="relative w-full lg:max-w-sm">
@@ -141,7 +175,7 @@ export function MediaBrowser() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Filter this folder"
+              placeholder="Search movies & web series"
               className="h-11 w-full rounded-xl border border-border bg-bg/70 pl-10 pr-3 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
           </div>
@@ -174,9 +208,9 @@ export function MediaBrowser() {
 
         {!sources.length && state === "idle" ? (
           <div className="mt-6 rounded-2xl border border-dashed border-border p-6 text-sm text-muted">
-            <p className="font-medium text-fg">No network media sources are configured yet.</p>
+            <p className="font-medium text-fg">No media source is configured yet.</p>
             <p className="mt-1 leading-6">
-              Add authorized/local servers to <code>MEDIA_SOURCES_JSON</code> on the Pinflix bridge; they will appear here automatically.
+              Configure the CineplexBD source on the Pinflix bridge and it will appear here automatically.
             </p>
           </div>
         ) : null}
@@ -185,14 +219,14 @@ export function MediaBrowser() {
           <div className="mt-8 flex min-h-52 items-center justify-center rounded-2xl border border-border bg-bg/40">
             <div className="text-center text-sm text-muted">
               <LoaderCircle className="mx-auto mb-3 size-6 animate-spin text-brand" />
-              Reading this media library…
+              Loading movies & web series…
             </div>
           </div>
         ) : null}
 
         {state === "error" ? (
           <div className="mt-8 rounded-2xl border border-border bg-bg/50 p-6">
-            <p className="font-medium">Source unreachable</p>
+            <p className="font-medium">CineplexBD unavailable</p>
             <p className="mt-1 text-sm text-muted">{error}</p>
           </div>
         ) : null}
@@ -215,7 +249,7 @@ export function MediaBrowser() {
                 <p className="truncate text-xs text-muted">/{browse.path || ""}</p>
               </div>
               <span className="ml-auto rounded-full border border-border bg-bg/60 px-2.5 py-1 text-[11px] text-muted">
-                {videos.length} videos
+                {directories.length} series · {videos.length} movies/episodes
               </span>
             </div>
 
@@ -233,7 +267,7 @@ export function MediaBrowser() {
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{item.name}</span>
-                      <span className="mt-0.5 block text-xs text-muted">Folder</span>
+                      <span className="mt-0.5 block text-xs text-muted">Web series</span>
                     </span>
                   </button>
                 ))}
@@ -273,7 +307,7 @@ export function MediaBrowser() {
 
             {!filtered.length ? (
               <div className="mt-8 rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted">
-                Nothing in this folder matches your filter.
+                Nothing here matches your search.
               </div>
             ) : null}
           </div>
