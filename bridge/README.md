@@ -39,3 +39,35 @@ PINFLIX_PRIVATE_PROXY_KEY=<separate long random key, optional but recommended>
 ```
 
 The bridge provides `GET /health` for a basic reachability check.
+
+
+## Network media libraries
+
+The same bridge can expose media libraries that are explicitly configured by the operator. Pinflix never accepts arbitrary upstream URLs from the browser; every target must remain inside one of the configured source roots.
+
+Set `MEDIA_SOURCES_JSON` to a JSON array:
+
+```bash
+MEDIA_SOURCES_JSON='[
+  {
+    "id": "home-media",
+    "name": "Home Media",
+    "description": "Movies available on my local network",
+    "baseUrl": "http://192.168.1.50/movies/"
+  }
+]'
+PINFLIX_APP_ORIGIN="https://iptv.pincodeit.com"
+```
+
+Optional playback compatibility settings:
+
+```text
+BRIDGE_MEDIA_TOKEN_KEY=<long random key; falls back to BRIDGE_TOKEN_KEY>
+FFMPEG_PATH=ffmpeg
+FFMPEG_VIDEO_CODEC=libx264
+FFMPEG_PRESET=veryfast
+```
+
+For files that the browser cannot decode natively (for example some MKV/HEVC combinations), the Pinflix player can request an FFmpeg compatibility stream. FFmpeg must be installed on the bridge machine. Hardware encoders such as `h264_qsv` or `h264_nvenc` can be selected with `FFMPEG_VIDEO_CODEC` when supported by that machine.
+
+Only add sources you are authorized to access and stream.
