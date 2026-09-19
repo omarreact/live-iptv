@@ -14,21 +14,54 @@ The current HAR-confirmed T Sports mapping uses provider stream ID `105`.
 
 ## Run
 
-```bash
+### Windows (recommended for the current Pinflix setup)
+
+Open PowerShell in the repository and run:
+
+```powershell
 cd bridge
-BRIDGE_SECRET="use-a-long-random-secret-at-least-24-chars" \
-BRIDGE_TOKEN_KEY="another-long-random-secret-at-least-24-chars" \
-IPTV_PLAYER_BASE="http://172.16.14.1" \
-ALLOWED_STREAM_IDS="105" \
-PORT=8787 \
+.\setup-windows.ps1
 npm start
 ```
 
-The machine running this process must be able to open the private IPTV portal and stream endpoints.
+The setup script:
+
+- verifies Node.js 24;
+- checks whether FFmpeg is available;
+- tests DHAKA-FLIX and CineplexBD reachability from that PC;
+- generates three cryptographically random bridge/token secrets;
+- writes a local `.env` file (ignored by Git);
+- preconfigures the `dhakaflix-json` and `cineplexbd` adapters.
+
+Then verify:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8787/health
+```
+
+Expected response:
+
+```json
+{"ok":true}
+```
+
+### Manual / Linux
+
+Copy the example environment file, replace the placeholder secrets, and start the bridge:
+
+```bash
+cd bridge
+cp .env.example .env
+npm start
+```
+
+The machine running this process must be able to open the private IPTV portal and media servers.
 
 ## Expose it safely
 
-Expose the bridge through an HTTPS reverse proxy or authenticated tunnel. Do **not** expose the private IPTV hosts themselves.
+Expose **only the bridge** through an HTTPS reverse proxy or tunnel. Do **not** expose the private IPTV hosts themselves.
+
+For a Windows machine, Cloudflare Tunnel is a practical option. Create a named tunnel in Cloudflare, route a hostname such as `bridge.example.com` to `http://localhost:8787`, then install the connector as a Windows service using the install command Cloudflare provides. Named tunnels are preferred over temporary `trycloudflare.com` URLs because the hostname remains stable.
 
 Then configure Vercel:
 
