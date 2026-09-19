@@ -70,4 +70,36 @@ FFMPEG_PRESET=veryfast
 
 For files that the browser cannot decode natively (for example some MKV/HEVC combinations), the Pinflix player can request an FFmpeg compatibility stream. FFmpeg must be installed on the bridge machine. Hardware encoders such as `h264_qsv` or `h264_nvenc` can be selected with `FFMPEG_VIDEO_CODEC` when supported by that machine.
 
+
+
+### Provider adapters
+
+For plain Apache/nginx-style indexes, omit `adapter` or use `"html"`.
+
+DHAKA-FLIX-style servers expose a small JSON POST API for folder contents/search. Configure a reachable server root with:
+
+```json
+{
+  "id": "dhakaflix-movies",
+  "name": "DHAKA-FLIX Movies",
+  "description": "Movies reachable on the local ISP network",
+  "adapter": "dhakaflix-json",
+  "baseUrl": "http://172.16.50.14/DHAKA-FLIX-14/"
+}
+```
+
+CineplexBD uses catalog/detail/player pages plus JSON episode metadata. The bridge adapter resolves those pages into protected Pinflix playback URLs:
+
+```json
+{
+  "id": "cineplexbd",
+  "name": "CineplexBD",
+  "description": "CineplexBD catalog reachable from this network",
+  "adapter": "cineplexbd",
+  "baseUrl": "http://cineplexbd.net/"
+}
+```
+
+The adapters do not bypass network access controls. The bridge machine must already be able to reach each configured source.
+
 Only add sources you are authorized to access and stream.
