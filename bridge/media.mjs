@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
+import { browseWithAdapter, resolveWithAdapter } from "./provider-adapters.mjs";
 
 const SECRET = process.env.BRIDGE_SECRET?.trim() || "";
 const TOKEN_KEY =
@@ -86,10 +87,16 @@ function parseSources() {
       }
     }
 
+    const requestedAdapter = typeof item.adapter === "string" ? item.adapter.trim() : "html";
+    const adapter = ["html", "dhakaflix-json", "cineplexbd"].includes(requestedAdapter)
+      ? requestedAdapter
+      : "html";
+
     map.set(id, {
       id,
       name,
       description: typeof item.description === "string" ? item.description.trim() : "",
+      adapter,
       base,
       headers,
     });
@@ -135,13 +142,23 @@ function key() {
   return createHash("sha256").update(TOKEN_KEY).digest();
 }
 
-function sealMedia(sourceId, target) {
+function sealMedia(sourceId, target, extraHeaders = {}) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key(), iv);
+  const safeHeaders = {};
+  for (const name of ["cookie", "referer"]) {
+    const value = extraHeaders?.[name];
+    if (typeof value === "string" && value && value.length <= 8_000) safeHeaders[name] = value;
+  }
   const encrypted = Buffer.concat([
     cipher.update(
       Buffer.from(
-        JSON.stringify({ s: sourceId, u: target, e: Date.now() + MEDIA_TOKEN_TTL_MS }),
+        JSON.stringify({
+          s: sourceId,
+          u: target,
+          h: safeHeaders,
+          e: Date.now() + MEDIA_TOKEN_TTL_MS,
+        }),
         "utf8",
       ),
     ),
@@ -294,6 +311,11 @@ async function fetchAllowed(source, initial, options = {}) {
     const headers = new Headers(source.headers);
     headers.set("accept", options.accept || "*/*");
     headers.set("user-agent", "Mozilla/5.0 PinflixMediaBridge/1.0");
+    if (options.headers && typeof options.headers === "object") {
+      for (const [name, value] of Object.entries(options.headers)) {
+        if (typeof value === "string" && value) headers.set(name, value);
+      }
+    }
     if (options.range) headers.set("range", options.range);
 
     const response = await fetch(current, {
@@ -312,13 +334,13 @@ async function fetchAllowed(source, initial, options = {}) {
   throw new Error("media redirect failed");
 }
 
-function playlistResponseUrl(origin, sourceId, target) {
+function playlistResponseUrl(origin, sourceId, target, extraHeaders = {}) {
   const url = new URL("/v1/media/file", origin);
-  url.searchParams.set("mt", sealMedia(sourceId, target));
+  url.searchParams.set("mt", sealMedia(sourceId, target, extraHeaders));
   return url.href;
 }
 
-function rewritePlaylist(text, base, source, origin) {
+function rewritePlaylist(text, base, source, origin, extraHeaders = {}) {
   return text
     .split(/\r?\n/)
     .map((line) => {
@@ -328,7 +350,7 @@ function rewritePlaylist(text, base, source, origin) {
         return line.replace(/URI="([^"]+)"/gi, (_, uri) => {
           try {
             const target = assertAllowedTarget(source, new URL(uri, base));
-            return `URI="${playlistResponseUrl(origin, source.id, target.href)}"`;
+            return `URI="${playlistResponseUrl(origin, source.id, target.href, extraHeaders)}"`;
           } catch {
             return 'URI=""';
           }
@@ -336,7 +358,7 @@ function rewritePlaylist(text, base, source, origin) {
       }
       try {
         const target = assertAllowedTarget(source, new URL(trimmed, base));
-        return playlistResponseUrl(origin, source.id, target.href);
+        return playlistResponseUrl(origin, source.id, target.href, extraHeaders);
       } catch {
         return "";
       }
@@ -357,15 +379,19 @@ function responseHeaders(upstream, fallbackType) {
   return headers;
 }
 
-function ffmpegHeaders(source) {
+function ffmpegHeaders(source, extraHeaders = {}) {
+  const merged = new Headers(source.headers);
+  for (const [name, value] of Object.entries(extraHeaders || {})) {
+    if (typeof value === "string" && value) merged.set(name, value);
+  }
   const lines = [];
-  for (const [name, value] of source.headers) lines.push(`${name}: ${value}`);
+  for (const [name, value] of merged) lines.push(`${name}: ${value}`);
   return lines.length ? `${lines.join("\r\n")}\r\n` : "";
 }
 
-function transcode(source, target, req, res) {
+function transcode(source, target, req, res, extraHeaders = {}) {
   const args = ["-hide_banner", "-loglevel", "error"];
-  const rawHeaders = ffmpegHeaders(source);
+  const rawHeaders = ffmpegHeaders(source, extraHeaders);
   if (rawHeaders) args.push("-headers", rawHeaders);
   args.push(
     "-i",
@@ -425,7 +451,18 @@ async function listSources(req, res) {
 async function browse(req, res, url) {
   if (!authorized(req)) return send(res, 401, "unauthorized");
   const source = sourceById(url.searchParams.get("source") || "");
-  const target = targetForPath(source, url.searchParams.get("path") || "");
+  const requestedPath = url.searchParams.get("path") || "";
+
+  const adapted = await browseWithAdapter(source, requestedPath);
+  if (adapted) {
+    return sendJson(res, 200, {
+      source: { id: source.id, name: source.name, description: source.description },
+      path: adapted.path,
+      items: adapted.items,
+    });
+  }
+
+  const target = targetForPath(source, requestedPath);
   const { response, finalUrl } = await fetchAllowed(source, target, {
     accept: "text/html,application/xhtml+xml,*/*;q=0.8",
     timeout: 12_000,
@@ -463,11 +500,14 @@ async function browse(req, res, url) {
 async function resolve(req, res, url) {
   if (!authorized(req)) return send(res, 401, "unauthorized");
   const source = sourceById(url.searchParams.get("source") || "");
-  const target = targetForPath(source, url.searchParams.get("path") || "");
+  const requestedPath = url.searchParams.get("path") || "";
+  const adapted = await resolveWithAdapter(source, requestedPath);
+  const target = adapted?.target ?? targetForPath(source, requestedPath);
+  const extraHeaders = adapted?.headers ?? {};
   const ext = extensionOf(target);
   if (!VIDEO_EXTENSIONS.has(ext)) return send(res, 415, "unsupported media type");
 
-  const token = sealMedia(source.id, target.href);
+  const token = sealMedia(source.id, target.href, extraHeaders);
   const origin = requestOrigin(req);
   const playback = new URL("/v1/media/file", origin);
   playback.searchParams.set("mt", token);
@@ -493,13 +533,19 @@ async function file(req, res, url) {
   const source = sourceById(payload.s);
   const target = assertAllowedTarget(source, new URL(payload.u));
 
+  const extraHeaders =
+    payload.h && typeof payload.h === "object" && !Array.isArray(payload.h)
+      ? payload.h
+      : {};
+
   if (url.searchParams.get("transcode") === "1") {
-    transcode(source, target, req, res);
+    transcode(source, target, req, res, extraHeaders);
     return;
   }
 
   const { response, finalUrl } = await fetchAllowed(source, target, {
     accept: "*/*",
+    headers: extraHeaders,
     range: req.headers.range,
     timeout: 30_000,
   });
@@ -511,10 +557,15 @@ async function file(req, res, url) {
   const ext = extensionOf(finalUrl);
   if (ext === "m3u8" || ext === "m3u" || /mpegurl|x-mpegurl|apple\.mpegurl|vnd\.apple/i.test(contentType)) {
     const text = await response.text();
-    return send(res, 200, rewritePlaylist(text, finalUrl.href, source, requestOrigin(req)), corsHeaders({
-      "content-type": "application/vnd.apple.mpegurl",
-      "cache-control": "no-store",
-    }));
+    return send(
+      res,
+      200,
+      rewritePlaylist(text, finalUrl.href, source, requestOrigin(req), extraHeaders),
+      corsHeaders({
+        "content-type": "application/vnd.apple.mpegurl",
+        "cache-control": "no-store",
+      }),
+    );
   }
 
   res.writeHead(response.status, responseHeaders(response, mimeForExtension(ext)));
