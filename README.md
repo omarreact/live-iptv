@@ -26,7 +26,7 @@ safe same-origin proxy + automatic failover
       ↓
 local/Hot Now discovery + iptv-org EPG mapping
       ↓
-optional TMDB + TVmaze entertainment metadata
+CineplexBD movies + web-series catalog via private bridge
       ↓
 hls.js / native HLS / mpegts.js
 ```
@@ -66,7 +66,7 @@ PINFLIX_BD_BRIDGE_SECRET=use-a-long-random-secret
 PINFLIX_PRIVATE_PROXY_KEY=use-another-long-random-secret
 ```
 
-TMDB is optional. Pinflix builds and runs without a TMDB credential.
+TMDB is optional and is only used to enrich live-TV EPG titles. The Movies & Web Series page does not use TMDB or TVmaze.
 
 The Bangladesh bridge is also optional. When its URL/secret are absent, private-channel entries are not exposed in discovery. See `bridge/README.md` for the private-network bridge setup.
 
