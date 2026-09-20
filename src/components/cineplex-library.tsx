@@ -6,6 +6,7 @@ import {
   Clapperboard,
   ExternalLink,
   Film,
+  Globe2,
   LoaderCircle,
   Search,
   Server,
@@ -21,23 +22,41 @@ import type {
 } from "@/lib/media/types";
 import { cn } from "@/lib/utils";
 
-type State = "loading" | "online" | "error";
+type BridgeState = "loading" | "online" | "offline";
 type TypeFilter = "all" | "movie" | "series";
 
 const SOURCE_ID = "cineplexbd";
+const CINEPLEX_HOME = "http://cineplexbd.net/index.php";
+
+function cineplexSearchUrl(query: string): string {
+  const q = query.trim();
+  return q
+    ? `http://cineplexbd.net/search.php?q=${encodeURIComponent(q)}`
+    : CINEPLEX_HOME;
+}
 
 function cardType(item: MediaItem): "movie" | "series" {
   if (item.mediaType === "series" || item.type === "directory") return "series";
   return "movie";
 }
 
+function providerHref(item: MediaItem): string {
+  if (item.providerUrl) return item.providerUrl;
+  const type = cardType(item);
+  const rawId = item.path.match(/[?&]id=(\d+)/)?.[1] || item.path.match(/\d+/)?.[0] || item.path;
+  return type === "series"
+    ? `http://cineplexbd.net/tview.php?id=${encodeURIComponent(rawId)}`
+    : `http://cineplexbd.net/view.php?id=${encodeURIComponent(rawId)}`;
+}
+
+function openExternal(url: string) {
+  const tab = window.open(url, "_blank", "noopener,noreferrer");
+  if (tab) tab.opener = null;
+}
+
 function CineplexCard({ item }: { item: MediaItem }) {
   const type = cardType(item);
-  const href =
-    item.providerUrl ||
-    (type === "series"
-      ? `http://cineplexbd.net/tview.php?id=${encodeURIComponent(item.path)}`
-      : `http://cineplexbd.net/view.php?id=${encodeURIComponent(item.path)}`);
+  const href = providerHref(item);
 
   return (
     <a
@@ -94,20 +113,20 @@ function CineplexCard({ item }: { item: MediaItem }) {
 }
 
 export function CineplexLibrary() {
-  const [state, setState] = useState<State>("loading");
+  const [bridgeState, setBridgeState] = useState<BridgeState>("loading");
   const [source, setSource] = useState<MediaSourceSummary | null>(null);
   const [initialItems, setInitialItems] = useState<MediaItem[]>([]);
   const [searchItems, setSearchItems] = useState<MediaItem[]>([]);
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [error, setError] = useState<string | null>(null);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
-    setState("loading");
-    setError(null);
+    setBridgeState("loading");
+    setBridgeError(null);
 
     fetch("/api/media/sources", { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
@@ -118,12 +137,12 @@ export function CineplexLibrary() {
         if (!response.ok) {
           throw new Error(
             payload.code === "BRIDGE_NOT_CONFIGURED"
-              ? "Pinflix bridge is not configured in production yet."
-              : "Pinflix bridge cannot currently reach your ISP network.",
+              ? "Optional Pinflix bridge is not configured."
+              : "Optional Pinflix bridge is currently unreachable.",
           );
         }
         const found = (payload.sources ?? []).find((item) => item.id === SOURCE_ID);
-        if (!found) throw new Error("CineplexBD is not configured on the Pinflix bridge.");
+        if (!found) throw new Error("CineplexBD is not configured on the optional bridge.");
         return found;
       })
       .then(async (found) => {
@@ -133,24 +152,24 @@ export function CineplexLibrary() {
           signal: controller.signal,
           cache: "no-store",
         });
-        if (!response.ok) throw new Error("CineplexBD catalog is currently unavailable.");
+        if (!response.ok) throw new Error("CineplexBD bridge catalog is currently unavailable.");
         const payload = (await response.json()) as MediaBrowsePayload;
         setInitialItems(payload.items ?? []);
-        setState("online");
+        setBridgeState("online");
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
-        setState("error");
+        setBridgeState("offline");
         setSource(null);
         setInitialItems([]);
-        setError(reason instanceof Error ? reason.message : "CineplexBD is unavailable.");
+        setBridgeError(reason instanceof Error ? reason.message : "Optional bridge unavailable.");
       });
 
     return () => controller.abort();
   }, []);
 
   useEffect(() => {
-    if (!query) {
+    if (!query || bridgeState !== "online") {
       setSearchItems([]);
       setSearching(false);
       return;
@@ -158,7 +177,6 @@ export function CineplexLibrary() {
 
     const controller = new AbortController();
     setSearching(true);
-    setError(null);
 
     const params = new URLSearchParams({
       source: SOURCE_ID,
@@ -171,23 +189,26 @@ export function CineplexLibrary() {
       cache: "no-store",
     })
       .then(async (response) => {
-        if (!response.ok) throw new Error("CineplexBD search is currently unavailable.");
+        if (!response.ok) throw new Error("CineplexBD bridge search is unavailable.");
         return response.json() as Promise<MediaSearchPayload>;
       })
-      .then((payload) => setSearchItems(payload.items ?? []))
+      .then((payload) => {
+        setSearchItems(payload.items ?? []);
+        setBridgeError(null);
+      })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
         setSearchItems([]);
-        setError(reason instanceof Error ? reason.message : "CineplexBD search failed.");
+        setBridgeError(reason instanceof Error ? reason.message : "CineplexBD bridge search failed.");
       })
       .finally(() => {
         if (!controller.signal.aborted) setSearching(false);
       });
 
     return () => controller.abort();
-  }, [query]);
+  }, [bridgeState, query]);
 
-  const items = query ? searchItems : initialItems;
+  const items = query && bridgeState === "online" ? searchItems : initialItems;
   const filtered = useMemo(() => {
     if (typeFilter === "all") return items;
     return items.filter((item) => cardType(item) === typeFilter);
@@ -195,7 +216,18 @@ export function CineplexLibrary() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setQuery(input.trim());
+    const next = input.trim();
+
+    if (bridgeState === "online") {
+      setQuery(next);
+      return;
+    }
+
+    openExternal(cineplexSearchUrl(next));
+  }
+
+  function directSearch() {
+    openExternal(cineplexSearchUrl(input));
   }
 
   return (
@@ -208,11 +240,12 @@ export function CineplexLibrary() {
               <span className="text-xs font-semibold uppercase tracking-[0.18em]">CineplexBD provider</span>
             </div>
             <h2 className="mt-2 text-2xl font-bold tracking-[-0.035em] sm:text-3xl">
-              Movies & series from your ISP catalog
+              Browser Direct + optional Pinflix catalog
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted">
-              Uses the CineplexBD JSON search contract captured from your browser. Pinflix keeps
-              temporary signed media URLs out of the catalog and opens playback on the provider page.
+              CineplexBD opens directly through your own browser and ISP connection. When the optional
+              Pinflix bridge is online, the same section also shows searchable CineplexBD catalog cards
+              inside Pinflix.
             </p>
           </div>
 
@@ -221,7 +254,11 @@ export function CineplexLibrary() {
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Search CineplexBD movies & series"
+              placeholder={
+                bridgeState === "online"
+                  ? "Search CineplexBD inside Pinflix"
+                  : "Search CineplexBD in your browser"
+              }
               aria-label="Search CineplexBD"
               className="h-11 w-full rounded-xl border border-border bg-bg/70 pl-10 pr-24 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15"
             />
@@ -235,14 +272,40 @@ export function CineplexLibrary() {
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] text-subtle">
+          <a
+            href={CINEPLEX_HOME}
+            target="_blank"
+            rel="noreferrer"
+            className="tv-focus inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/8 px-2.5 py-1.5 text-emerald-200"
+          >
+            <Globe2 className="size-3.5" />
+            Browser Direct
+            <ExternalLink className="size-3" />
+          </a>
+
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-bg/60 px-2.5 py-1.5">
             <Server className="size-3.5" />
             CineplexBD
           </span>
+
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-bg/60 px-2.5 py-1.5">
-            <Wifi className={cn("size-3.5", state === "online" ? "text-emerald-300" : "text-subtle")} />
-            {state === "online" ? "Bridge connected" : "Bridge required"}
+            <Wifi
+              className={cn(
+                "size-3.5",
+                bridgeState === "online"
+                  ? "text-emerald-300"
+                  : bridgeState === "loading"
+                    ? "text-amber-300"
+                    : "text-subtle",
+              )}
+            />
+            {bridgeState === "online"
+              ? "Catalog bridge connected"
+              : bridgeState === "loading"
+                ? "Checking optional bridge"
+                : "Browser Direct active"}
           </span>
+
           <button
             type="button"
             onClick={() => setTypeFilter("all")}
@@ -277,27 +340,58 @@ export function CineplexLibrary() {
           </button>
         </div>
 
-        {state === "loading" ? (
-          <div className="mt-7 flex min-h-56 items-center justify-center rounded-2xl border border-border bg-surface/70">
+        {bridgeState === "loading" ? (
+          <div className="mt-7 flex min-h-40 items-center justify-center rounded-2xl border border-border bg-surface/70">
             <div className="text-center text-sm text-muted">
               <LoaderCircle className="mx-auto mb-3 size-6 animate-spin text-brand" />
-              Connecting to CineplexBD through the Pinflix bridge…
+              Checking the optional CineplexBD catalog bridge…
             </div>
           </div>
         ) : null}
 
-        {state === "error" ? (
-          <div className="mt-7 rounded-2xl border border-border bg-surface/70 p-8 text-center">
-            <p className="font-semibold">CineplexBD bridge unavailable</p>
-            <p className="mt-1 text-sm text-muted">{error}</p>
-            <p className="mt-3 text-xs text-subtle">
-              The CineplexBD site in your HAR is HTTP/ISP-reachable, so the bridge must run from that
-              same network and be exposed to Vercel over HTTPS.
-            </p>
+        {bridgeState === "offline" ? (
+          <div className="mt-7 overflow-hidden rounded-2xl border border-border bg-surface/70">
+            <div className="grid gap-0 lg:grid-cols-[1.2fr_.8fr]">
+              <div className="p-6 sm:p-8">
+                <div className="flex items-center gap-2 text-emerald-300">
+                  <Globe2 className="size-5" />
+                  <p className="font-semibold">Browser Direct mode</p>
+                </div>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+                  Pinflix cannot read an HTTP CineplexBD API from this HTTPS page because browsers block
+                  mixed active content. But top-level browser navigation is allowed, so CineplexBD can
+                  still open using the same ISP connection where it already works for you.
+                </p>
+                {bridgeError ? (
+                  <p className="mt-3 text-xs text-subtle">Optional bridge: {bridgeError}</p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col justify-center gap-3 border-t border-border bg-bg/35 p-6 lg:border-l lg:border-t-0">
+                <button
+                  type="button"
+                  onClick={directSearch}
+                  className="tv-focus inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-black"
+                >
+                  <Search className="size-4" />
+                  {input.trim() ? "Search on CineplexBD" : "Open CineplexBD"}
+                  <ExternalLink className="size-4" />
+                </button>
+                <a
+                  href={CINEPLEX_HOME}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="tv-focus inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-fg hover:border-border-strong"
+                >
+                  <Globe2 className="size-4" />
+                  Browse provider
+                </a>
+              </div>
+            </div>
           </div>
         ) : null}
 
-        {state === "online" && searching ? (
+        {bridgeState === "online" && searching ? (
           <div className="mt-7 flex min-h-44 items-center justify-center rounded-2xl border border-border bg-surface/70">
             <div className="text-center text-sm text-muted">
               <LoaderCircle className="mx-auto mb-3 size-6 animate-spin text-brand" />
@@ -306,29 +400,48 @@ export function CineplexLibrary() {
           </div>
         ) : null}
 
-        {state === "online" && !searching && filtered.length ? (
-          <div className="mt-7 grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7">
-            {filtered.map((item) => (
-              <CineplexCard key={item.id} item={item} />
-            ))}
-          </div>
+        {bridgeState === "online" && !searching && filtered.length ? (
+          <>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={directSearch}
+                className="tv-focus inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-bg/60 px-3 text-xs font-medium text-muted hover:text-fg"
+              >
+                <ExternalLink className="size-3.5" />
+                Search directly on CineplexBD
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7">
+              {filtered.map((item) => (
+                <CineplexCard key={item.id} item={item} />
+              ))}
+            </div>
+          </>
         ) : null}
 
-        {state === "online" && !searching && !filtered.length ? (
+        {bridgeState === "online" && !searching && !filtered.length ? (
           <div className="mt-7 rounded-2xl border border-dashed border-border bg-surface/60 p-10 text-center">
             <Film className="mx-auto size-8 text-subtle" />
-            <p className="mt-3 font-semibold">{query ? "No CineplexBD results" : "Catalog is empty"}</p>
+            <p className="mt-3 font-semibold">{query ? "No bridge results" : "Catalog is empty"}</p>
             <p className="mt-1 text-sm text-muted">
-              {query ? "Try another title." : "Use search to query CineplexBD directly."}
+              You can still search CineplexBD directly through your browser.
             </p>
+            <button
+              type="button"
+              onClick={directSearch}
+              className="tv-focus mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-black"
+            >
+              <ExternalLink className="size-4" />
+              Search directly
+            </button>
           </div>
         ) : null}
 
-        {source ? (
-          <p className="mt-5 text-[11px] text-subtle">
-            Source: {source.name}. Movie IDs and metadata come from the provider; expiring media tokens are not stored.
-          </p>
-        ) : null}
+        <p className="mt-5 text-[11px] text-subtle">
+          Browser Direct uses CineplexBD on your current network. {source ? `Bridge source: ${source.name}. ` : ""}
+          Pinflix does not store or copy CineplexBD's temporary signed media URLs.
+        </p>
       </div>
     </section>
   );
