@@ -1,6 +1,11 @@
 import "server-only";
 
-import type { MediaBrowsePayload, MediaResolvePayload, MediaSourceSummary } from "./types";
+import type {
+  MediaBrowsePayload,
+  MediaResolvePayload,
+  MediaSearchPayload,
+  MediaSourceSummary,
+} from "./types";
 
 function bridgeConfig(): { base: URL; secret: string } {
   const rawBase = process.env.PINFLIX_BD_BRIDGE_URL?.trim();
@@ -52,6 +57,21 @@ export async function getMediaSources(): Promise<MediaSourceSummary[]> {
 export async function browseMediaSource(source: string, path = ""): Promise<MediaBrowsePayload> {
   const params = new URLSearchParams({ source: safeSourceId(source), path: safePath(path) });
   return bridgeJson<MediaBrowsePayload>("/v1/media/browse", params);
+}
+
+export async function searchMediaSource(
+  source: string,
+  query: string,
+  limit = 24,
+): Promise<MediaSearchPayload> {
+  const safeQuery = query.trim().slice(0, 120);
+  const safeLimit = Math.max(1, Math.min(limit, 50));
+  const params = new URLSearchParams({
+    source: safeSourceId(source),
+    q: safeQuery,
+    limit: String(safeLimit),
+  });
+  return bridgeJson<MediaSearchPayload>("/v1/media/search", params);
 }
 
 export async function resolveMediaSource(source: string, path: string): Promise<MediaResolvePayload> {

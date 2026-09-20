@@ -173,13 +173,27 @@ function cineplexLinkItems(source, html, pageUrl) {
     const fallback = isSeries ? `Series ${id}` : `Movie ${id}`;
     const name = bestAnchorTitle(match[2], fallback);
 
+    const posterRaw = match[2].match(/<img\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1] || "";
+    let poster = "";
+    try {
+      poster = posterRaw ? assertAllowed(source, new URL(posterRaw, pageUrl)).href : "";
+    } catch {
+      poster = "";
+    }
+    const year = decodeHtml(match[2]).match(/\b(?:19|20)\d{2}\b/)?.[0] || null;
+
     items.push({
       id: idFor(source, path),
       type: isSeries ? "directory" : "video",
       name,
       path,
       extension: null,
-      playable: !isSeries,
+      playable: false,
+      providerUrl: target.href,
+      poster: poster || null,
+      year,
+      category: null,
+      mediaType: isSeries ? "series" : "movie",
     });
   }
   return items;
@@ -280,6 +294,91 @@ async function cineplexEpisodes(source, target, html) {
       playable: true,
     };
   }).filter(Boolean);
+}
+
+function cineplexSearchItem(source, row) {
+  if (!row || typeof row !== "object") return null;
+
+  const id = String(row.id ?? "").trim();
+  if (!/^\d{1,12}$/.test(id)) return null;
+
+  const rawType = String(row.type ?? "movie").trim().toLowerCase();
+  const isSeries = rawType === "series";
+
+  let target;
+  try {
+    const rawUrl = typeof row.url === "string" && row.url.trim()
+      ? row.url.trim()
+      : (isSeries ? "tview.php?id=" : "view.php?id=") + encodeURIComponent(id);
+    target = assertAllowed(source, new URL(rawUrl, source.base));
+  } catch {
+    return null;
+  }
+
+  let poster = null;
+  const rawPoster = typeof row.poster === "string" ? row.poster.trim() : "";
+  if (rawPoster) {
+    try {
+      poster = assertAllowed(source, new URL(rawPoster, source.base)).href;
+    } catch {
+      poster = null;
+    }
+  }
+
+  const path = relativePath(source, target);
+  const title = decodeHtml(String(row.title ?? "")) || (isSeries ? `Series ${id}` : `Movie ${id}`);
+  const category = decodeHtml(String(row.category ?? "")) || null;
+  const yearRaw = String(row.year ?? "").match(/(?:19|20)\d{2}/)?.[0] || null;
+
+  return {
+    id: idFor(source, path),
+    type: isSeries ? "directory" : "video",
+    name: title,
+    path,
+    extension: null,
+    playable: false,
+    providerUrl: target.href,
+    poster,
+    year: yearRaw,
+    category,
+    mediaType: isSeries ? "series" : "movie",
+  };
+}
+
+async function searchCineplex(source, query, limit = 24) {
+  const q = String(query || "").trim().slice(0, 120);
+  if (!q) return { items: [] };
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 24, 50));
+  const target = assertAllowed(source, new URL("search_ajax.php", source.base));
+  target.searchParams.set("q", q);
+  target.searchParams.set("limit", String(safeLimit));
+
+  const { response } = await providerFetch(source, target, {
+    accept: "application/json",
+    timeout: 12_000,
+  });
+  if (!response.ok) throw new Error(`Cineplex search failed: ${response.status}`);
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("Cineplex search returned invalid JSON");
+  }
+
+  const rows = Array.isArray(payload?.results)
+    ? payload.results
+    : Array.isArray(payload)
+      ? payload
+      : [];
+
+  return {
+    items: rows
+      .map((row) => cineplexSearchItem(source, row))
+      .filter(Boolean)
+      .slice(0, safeLimit),
+  };
 }
 
 async function browseCineplex(source, path) {
@@ -385,7 +484,13 @@ export async function browseWithAdapter(source, path) {
   return null;
 }
 
+export async function searchWithAdapter(source, query, limit) {
+  if (source.adapter === "cineplexbd") return searchCineplex(source, query, limit);
+  return null;
+}
+
 export async function resolveWithAdapter(source, path) {
-  if (source.adapter === "cineplexbd") return resolveCineplex(source, path);
+  // CineplexBD direct signed playback extraction is intentionally disabled.
+  // Its catalog/detail pages are integrated, but playback remains provider-side.
   return null;
 }

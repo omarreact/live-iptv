@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { LogoMark } from "@/components/logo-mark";
-import { PlayableLibrary } from "@/components/playable-library";
+import { CineplexLibrary } from "@/components/cineplex-library";
 import type {
   MovieBoxCatalogItem,
   MovieBoxCatalogPayload,
@@ -811,7 +811,7 @@ export function EntertainmentHub() {
             </div>
           </section>
 
-          <PlayableLibrary />
+          <CineplexLibrary />
 
           <div id="moviebox-catalog" className="relative z-10 pb-14">
             <div className="sticky top-[68px] z-20 mx-4 mb-8 rounded-2xl border border-border bg-bg/95 p-3 shadow-2xl backdrop-blur-xl sm:mx-6 lg:mx-8">
