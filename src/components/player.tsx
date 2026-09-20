@@ -100,6 +100,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     if (!el) return;
     const video: HTMLVideoElement = el;
     let cancelled = false;
+    let hasStarted = false;
     let startupTimer: number | null = null;
     let stallTimer: number | null = null;
     let progressTimer: number | null = null;
@@ -169,6 +170,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
 
     function fail(message?: string, status?: number) {
       if (cancelled) return;
+      hasStarted = false;
       clearWatchdogs();
 
       // Always prefer a ranked backup over retrying the same source through a
@@ -198,7 +200,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     };
 
     const armStallWatchdog = () => {
-      if (!started) return;
+      if (!hasStarted) return;
       clearStallTimer();
       stallTimer = window.setTimeout(() => {
         fail("The live signal stopped responding.");
@@ -206,6 +208,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     };
 
     const onPlaying = () => {
+      hasStarted = true;
       clearStartupTimer();
       clearStallTimer();
       setPlaying(true);
