@@ -23,6 +23,8 @@ type MediaBrowserProps = {
   eyebrow?: string;
   title?: string;
   description?: string;
+  initialPath?: string;
+  initialQuery?: string;
 };
 
 function parentPath(path: string): string {
@@ -46,6 +48,8 @@ export function MediaBrowser({
   eyebrow = "Network cinema",
   title = "Your reachable media servers, inside Pinflix",
   description = "Browse media exposed by your configured bridge. Pinflix keeps private server addresses and bridge credentials away from the browser.",
+  initialPath = "",
+  initialQuery = "",
 }: MediaBrowserProps = {}) {
   const router = useRouter();
   const [sources, setSources] = useState<MediaSourceSummary[]>([]);
@@ -70,7 +74,7 @@ export function MediaBrowser({
       const payload = (await response.json()) as MediaBrowsePayload;
       setBrowse(payload);
       setActiveSource(source);
-      setQuery("");
+      setQuery(path === initialPath ? initialQuery : "");
       setState("online");
     } catch {
       setBrowse(null);
@@ -78,7 +82,7 @@ export function MediaBrowser({
       setState("error");
       setError("This source is configured, but the bridge cannot reach it right now.");
     }
-  }, []);
+  }, [initialPath, initialQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,7 +119,7 @@ export function MediaBrowser({
         const initial = preferred ?? next[0];
 
         if (initial) {
-          void load(initial.id, "");
+          void load(initial.id, initialPath);
           return;
         }
 
@@ -135,7 +139,7 @@ export function MediaBrowser({
     return () => {
       cancelled = true;
     };
-  }, [allowedSourceIds, load, preferredSourceId]);
+  }, [allowedSourceIds, initialPath, load, preferredSourceId]);
 
   const filtered = useMemo(() => {
     const items = browse?.items ?? [];
