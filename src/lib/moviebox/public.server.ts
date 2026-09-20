@@ -144,7 +144,7 @@ function parseHome(html: string): MovieBoxCatalogRow[] {
   let activeSection = "Trending Movies";
 
   const token =
-    /<(h[1-4]|section|div)\b[^>]*>([\s\S]*?)<\/\1>|<a\b([^>]*)href\s*=\s*["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi;
+    /<(h[1-4])\b[^>]*>([\s\S]*?)<\/\1>|<a\b([^>]*)href\s*=\s*["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = token.exec(html))) {
