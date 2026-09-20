@@ -193,7 +193,12 @@ async function fetchMetadata(identifier: string): Promise<ArchiveMetadataRespons
 }
 
 function buildSearchQuery(query: string): string {
-  const clauses = ["mediatype:movies", "collection:feature_films", "licenseurl:*"];
+  const clauses = [
+    "mediatype:movies",
+    "collection:feature_films",
+    "licenseurl:*",
+    '(format:"h.264" OR format:"512Kb MPEG4" OR format:"MPEG4")',
+  ];
   const tokens = query
     .normalize("NFKC")
     .replace(/[^\p{L}\p{N}\s'-]/gu, " ")
@@ -264,46 +269,17 @@ export async function getArchivePlayableCatalog({
     900,
   );
 
-  const candidates = (search.response?.docs ?? [])
+  const playable = (search.response?.docs ?? [])
     .map(mapDoc)
     .filter((item): item is ArchivePlayableItem => Boolean(item))
-    .slice(0, 28);
-
-  const playable: ArchivePlayableItem[] = [];
-  let cursor = 0;
-
-  async function worker() {
-    while (cursor < candidates.length && playable.length < limit) {
-      const index = cursor++;
-      const item = candidates[index];
-      if (!item) continue;
-
-      try {
-        const metadata = await fetchMetadata(item.identifier);
-        const licenseUrl = firstText(metadata.metadata?.licenseurl) || item.licenseUrl;
-        if (!licenseAllowed(licenseUrl)) continue;
-        if (!choosePlayableFile(metadata.files)) continue;
-
-        playable.push({
-          ...item,
-          licenseUrl,
-          licenseLabel: licenseLabel(licenseUrl),
-        });
-      } catch {
-        // Skip unavailable or malformed archive entries.
-      }
-    }
-  }
-
-  const workerCount = Math.min(6, candidates.length);
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    .slice(0, Math.max(1, Math.min(limit, 24)));
 
   return {
     source: "internet-archive",
     fetchedAt: new Date().toISOString(),
     sort,
     query,
-    items: playable.slice(0, Math.max(1, Math.min(limit, 24))),
+    items: playable,
   };
 }
 
