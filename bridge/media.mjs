@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { browseWithAdapter, resolveWithAdapter } from "./provider-adapters.mjs";
+import { browseWithAdapter, resolveWithAdapter, searchWithAdapter } from "./provider-adapters.mjs";
 
 const SECRET = process.env.BRIDGE_SECRET?.trim() || "";
 const TOKEN_KEY =
@@ -498,6 +498,28 @@ async function browse(req, res, url) {
   });
 }
 
+async function search(req, res, url) {
+  if (!authorized(req)) return send(res, 401, "unauthorized");
+  const source = sourceById(url.searchParams.get("source") || "");
+  const query = (url.searchParams.get("q") || "").trim();
+  const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || "24") || 24, 50));
+
+  const adapted = await searchWithAdapter(source, query, limit);
+  if (!adapted) {
+    return sendJson(res, 200, {
+      source: { id: source.id, name: source.name, description: source.description },
+      query,
+      items: [],
+    });
+  }
+
+  return sendJson(res, 200, {
+    source: { id: source.id, name: source.name, description: source.description },
+    query,
+    items: adapted.items,
+  });
+}
+
 async function resolve(req, res, url) {
   if (!authorized(req)) return send(res, 401, "unauthorized");
   const source = sourceById(url.searchParams.get("source") || "");
@@ -590,6 +612,7 @@ export async function handleMediaRequest(req, res, url) {
 
     if (url.pathname === "/v1/media/sources") await listSources(req, res);
     else if (url.pathname === "/v1/media/browse") await browse(req, res, url);
+    else if (url.pathname === "/v1/media/search") await search(req, res, url);
     else if (url.pathname === "/v1/media/resolve") await resolve(req, res, url);
     else if (url.pathname === "/v1/media/file") await file(req, res, url);
     else send(res, 404, "not found", corsHeaders());
