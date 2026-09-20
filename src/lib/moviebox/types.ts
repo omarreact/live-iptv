@@ -30,5 +30,6 @@ export type MovieBoxDetailPayload = {
   rating: number | null;
   runtime: string | null;
   genres: string[];
+  country: string | null;
   href: string;
 };
