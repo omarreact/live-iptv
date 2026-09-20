@@ -12,11 +12,22 @@ export type MediaItem = {
   path: string;
   extension: string | null;
   playable: boolean;
+  providerUrl?: string;
+  poster?: string | null;
+  year?: string | null;
+  category?: string | null;
+  mediaType?: "movie" | "series" | null;
 };
 
 export type MediaBrowsePayload = {
   source: MediaSourceSummary;
   path: string;
+  items: MediaItem[];
+};
+
+export type MediaSearchPayload = {
+  source: MediaSourceSummary;
+  query: string;
   items: MediaItem[];
 };
 
