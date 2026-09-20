@@ -1,10 +1,7 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Player } from "@/components/player";
-import {
-  getBangladeshPrivateChannels,
-  getPrivateChannelById,
-} from "@/lib/iptv/private-channels";
+import { getPrivateChannelById } from "@/lib/iptv/private-channels";
 import { isPrivateChannelId } from "@/lib/iptv/private-locator";
 import { getChannelById } from "@/lib/iptv/provider/iptv-org";
 import { getSmartRelatedChannels } from "@/lib/iptv/related";
@@ -14,11 +11,9 @@ export const dynamic = "force-dynamic";
 
 export default async function WatchPage({ params }: { params: Promise<{ channelId: string }> }) {
   const { channelId } = await params;
-  const location = await resolveViewerLocationWithIpFallback(await headers());
-  const privateChannels =
-    location.country === "BD" ? getBangladeshPrivateChannels() : [];
 
   if (isPrivateChannelId(channelId)) {
+    const location = await resolveViewerLocationWithIpFallback(await headers());
     if (location.country !== "BD") notFound();
 
     const channel = getPrivateChannelById(channelId);
@@ -26,7 +21,6 @@ export default async function WatchPage({ params }: { params: Promise<{ channelI
 
     const related = await getSmartRelatedChannels(channel, {
       viewerCountry: location.country,
-      extraChannels: privateChannels,
       limit: 16,
     });
 
@@ -36,12 +30,7 @@ export default async function WatchPage({ params }: { params: Promise<{ channelI
   const channel = await getChannelById(channelId);
   if (!channel) notFound();
 
-  const related = await getSmartRelatedChannels(channel, {
-    viewerCountry: location.country,
-    extraChannels: privateChannels,
-    limit: 16,
-  });
-
+  const related = await getSmartRelatedChannels(channel, { limit: 16 });
   return <Player key={channel.id} channel={channel} related={related} />;
 }
 

@@ -1,15 +1,13 @@
 import { Search } from "lucide-react";
 import { unstable_cache } from "next/cache";
 import { ChannelRow } from "@/components/channel-row";
-import { HotNow } from "@/components/hot-now";
-import { LocalChannels } from "@/components/local-channels";
 import { RecentRow } from "@/components/recent-row";
 import { getHomeData } from "@/lib/iptv/provider/iptv-org";
 import type { HomeData } from "@/lib/iptv/types";
 
 export const revalidate = 600;
 
-const getCachedHomeData = unstable_cache(getHomeData, ["pinflix-home-data-v1"], {
+const getCachedHomeData = unstable_cache(getHomeData, ["pinflix-home-data-v2"], {
   revalidate: 600,
 });
 
@@ -47,9 +45,7 @@ export default async function HomePage() {
       </section>
 
       <div className="mx-auto max-w-[1400px] space-y-9">
-        <LocalChannels />
-        <HotNow />
-        <RecentRow />
+<RecentRow />
 
         {data.featured.length > 0 ? (
           <ChannelRow

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChannelGrid } from "@/components/channel-card";
-import { BangladeshPrivateRail } from "@/components/private-channel-rail";
 import { Button } from "@/components/ui/button";
 import { CATEGORY_META, categoryLabel } from "@/lib/iptv/meta";
 import { getChannelsByCountry } from "@/lib/iptv/provider/iptv-org";
@@ -98,12 +97,7 @@ export default async function CountryPage({
           />
         ))}
       </div>
-
-      {code.toUpperCase() === "BD" ? (
-        <BangladeshPrivateRail category={activeCategory} className="mt-8" />
-      ) : null}
-
-      <div className="mt-8">
+<div className="mt-8">
         {channels.length ? (
           <ChannelGrid channels={channels} />
         ) : (

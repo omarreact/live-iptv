@@ -75,22 +75,6 @@ export function ChannelGridSkeleton({ count = 12 }: { count?: number }) {
   );
 }
 
-export function HotNowSkeleton() {
-  return (
-    <div className="hide-scrollbar flex gap-3 overflow-hidden" aria-hidden="true">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <div key={index} className="flex min-w-[260px] max-w-[340px] flex-1 items-start gap-3 rounded-xl border border-border bg-surface px-4 py-3">
-          <Shimmer className="size-8 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <Shimmer className="h-4 w-4/5" rounded="rounded-md" />
-            <Shimmer className="mt-2 h-3 w-3/5" rounded="rounded-md" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function PageHeaderSkeleton() {
   return (
     <div className="max-w-2xl" aria-hidden="true">
@@ -116,13 +100,6 @@ export function HomeLoading() {
         <Shimmer className="mt-5 h-12 max-w-2xl border border-border" />
       </section>
       <div className="mx-auto max-w-[1400px] space-y-10">
-        <section className="px-4 sm:px-6 lg:px-8">
-          <div className="mb-3 flex items-center gap-2">
-            <Shimmer className="size-4" rounded="rounded-full" />
-            <Shimmer className="h-5 w-24" rounded="rounded-md" />
-          </div>
-          <HotNowSkeleton />
-        </section>
         {Array.from({ length: 3 }).map((_, index) => (
           <section key={index}>
             <div className="px-4 sm:px-6 lg:px-8"><Shimmer className="h-7 w-36" rounded="rounded-md" /></div>

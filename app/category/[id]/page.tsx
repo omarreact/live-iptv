@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChannelGrid } from "@/components/channel-card";
-import { BangladeshPrivateRail } from "@/components/private-channel-rail";
 import { Button } from "@/components/ui/button";
 import { getChannelsByCategory } from "@/lib/iptv/provider/iptv-org";
 import { parseSortMode, SORT_MODES, type SortMode } from "@/lib/iptv/sort";
@@ -98,12 +97,7 @@ export default async function CategoryPage({
           />
         ))}
       </div>
-
-      {!activeCountry || activeCountry === "BD" ? (
-        <BangladeshPrivateRail category={category.id} className="mt-8" />
-      ) : null}
-
-      <div className="mt-8">
+<div className="mt-8">
         {channels.length ? (
           <ChannelGrid channels={channels} />
         ) : (

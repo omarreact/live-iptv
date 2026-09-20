@@ -25,6 +25,7 @@ export function ChannelCard({
   const [broken, setBroken] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const showLogo = Boolean(channel.logo) && !broken;
+  const available = channel.available !== false;
 
   useEffect(() => {
     setBroken(false);
@@ -35,9 +36,10 @@ export function ChannelCard({
     <Link
       href={"/watch/" + channel.id}
       prefetch={false}
-      aria-label={`Watch ${channel.shortName}`}
+      aria-label={available ? `Watch ${channel.shortName}` : `${channel.shortName} is currently unavailable`}
       className={cn(
         "group tv-focus flex shrink-0 flex-col gap-2.5 rounded-xl outline-none",
+        !available && "opacity-70",
         featured ? "w-64 sm:w-72" : "w-40 sm:w-44",
         className,
       )}
@@ -75,6 +77,11 @@ export function ChannelCard({
             {monogram(channel.shortName)}
           </div>
         )}
+        {!available ? (
+          <span className="absolute bottom-2 right-2 rounded-md border border-border bg-bg/90 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+            Unavailable
+          </span>
+        ) : null}
       </div>
 
       <div className="min-w-0 px-0.5">

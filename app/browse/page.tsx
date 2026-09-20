@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { BangladeshPrivateRail } from "@/components/private-channel-rail";
 import { getGuideSummary } from "@/lib/iptv/provider/iptv-org";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +20,7 @@ export default async function BrowsePage() {
     <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <header className="max-w-2xl">
         <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Browse</h1>
-        <p className="mt-2 text-muted">Start with a country or category.</p>
+        <p className="mt-2 text-muted">Browse the curated 142-channel Pinflix Live TV guide.</p>
       </header>
 
       <form action="/search" method="get" className="relative mt-5 max-w-2xl">
@@ -34,10 +33,7 @@ export default async function BrowsePage() {
           className="h-11 w-full rounded-xl border border-border bg-surface pl-11 pr-4 text-sm outline-none transition-colors placeholder:text-subtle hover:border-border-strong focus:border-brand focus:ring-2 focus:ring-brand/15"
         />
       </form>
-
-      <BangladeshPrivateRail className="mt-9" />
-
-      <section className="mt-9">
+<section className="mt-9">
         <div className="flex items-end justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold">Countries</h2>

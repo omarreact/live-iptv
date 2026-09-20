@@ -128,6 +128,12 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     setError(null);
     setStarted(false);
     setPlaying(false);
+
+    if (!(channel.streams?.length ?? 0) && !channel.url) {
+      setError("No public stream is currently available for this channel.");
+      return;
+    }
+
     const activeStream = channel.streams?.[streamIndex] ??
       channel.streams?.[0] ?? {
         id: `${channel.id}:legacy`,
