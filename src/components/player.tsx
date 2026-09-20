@@ -100,6 +100,30 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     if (!el) return;
     const video: HTMLVideoElement = el;
     let cancelled = false;
+    let startupTimer: number | null = null;
+    let stallTimer: number | null = null;
+    let progressTimer: number | null = null;
+    let lastProgressAt = Date.now();
+    let lastCurrentTime = -1;
+
+    const clearStartupTimer = () => {
+      if (startupTimer !== null) window.clearTimeout(startupTimer);
+      startupTimer = null;
+    };
+    const clearStallTimer = () => {
+      if (stallTimer !== null) window.clearTimeout(stallTimer);
+      stallTimer = null;
+    };
+    const clearProgressTimer = () => {
+      if (progressTimer !== null) window.clearInterval(progressTimer);
+      progressTimer = null;
+    };
+    const clearWatchdogs = () => {
+      clearStartupTimer();
+      clearStallTimer();
+      clearProgressTimer();
+    };
+
     setError(null);
     setStarted(false);
     setPlaying(false);
@@ -145,27 +169,20 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
 
     function fail(message?: string, status?: number) {
       if (cancelled) return;
+      clearWatchdogs();
 
-      // A concrete proxy error means the upstream source itself failed.
-      // Skip it immediately when a ranked backup exists instead of retrying
-      // the same origin directly and making the viewer wait through two failures.
-      if (transport === "proxy" && status && status >= 400 && hasNextStream) {
-        setTransport("proxy");
-        setStreamIndex((n) => n + 1);
-        return;
-      }
-
-      // If the proxy failed without an upstream HTTP status (for example a
-      // network/TLS path the viewer's browser may still reach), direct fallback
-      // is safe only for clean HTTPS hostnames.
-      if (transport === "proxy" && directEligible) {
-        setTransport("direct");
-        return;
-      }
-
+      // Always prefer a ranked backup over retrying the same source through a
+      // different transport. This keeps a dead feed from trapping the viewer.
       if (hasNextStream) {
         setTransport("proxy");
         setStreamIndex((n) => n + 1);
+        return;
+      }
+
+      // On the final source, a clean HTTPS origin may still work directly when
+      // the server-side proxy path is the part that failed.
+      if (transport === "proxy" && directEligible && (!status || status >= 400)) {
+        setTransport("direct");
         return;
       }
 
@@ -173,15 +190,67 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       setError(message ?? "This channel is temporarily unavailable.");
     }
 
+    const armStartupWatchdog = () => {
+      clearStartupTimer();
+      startupTimer = window.setTimeout(() => {
+        fail("This source did not start in time.");
+      }, 16_000);
+    };
+
+    const armStallWatchdog = () => {
+      if (!started) return;
+      clearStallTimer();
+      stallTimer = window.setTimeout(() => {
+        fail("The live signal stopped responding.");
+      }, 12_000);
+    };
+
     const onPlaying = () => {
+      clearStartupTimer();
+      clearStallTimer();
       setPlaying(true);
       setStarted(true);
       setError(null);
+      lastCurrentTime = video.currentTime;
+      lastProgressAt = Date.now();
+
+      if (progressTimer === null) {
+        progressTimer = window.setInterval(() => {
+          if (cancelled || video.paused || video.ended) return;
+          const current = video.currentTime;
+          if (Number.isFinite(current) && current > lastCurrentTime + 0.05) {
+            lastCurrentTime = current;
+            lastProgressAt = Date.now();
+            return;
+          }
+          if (Date.now() - lastProgressAt >= 15_000) {
+            fail("The live signal stalled.");
+          }
+        }, 3_000);
+      }
     };
-    const onPause = () => setPlaying(false);
+    const onPause = () => {
+      setPlaying(false);
+      clearStallTimer();
+    };
+    const onWaiting = () => {
+      if (!video.paused) armStallWatchdog();
+    };
+    const onCanPlay = () => clearStallTimer();
+    const onTimeUpdate = () => {
+      const current = video.currentTime;
+      if (Number.isFinite(current) && current > lastCurrentTime + 0.05) {
+        lastCurrentTime = current;
+        lastProgressAt = Date.now();
+      }
+    };
     const onError = () => fail();
     video.addEventListener("playing", onPlaying);
     video.addEventListener("pause", onPause);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("stalled", onWaiting);
+    video.addEventListener("canplay", onCanPlay);
+    video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("error", onError);
     async function attachHls(onFatal?: () => void) {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
@@ -268,12 +337,18 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
         fail();
       }
     }
+    armStartupWatchdog();
     void attach();
     revealChrome();
     return () => {
       cancelled = true;
+      clearWatchdogs();
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("stalled", onWaiting);
+      video.removeEventListener("canplay", onCanPlay);
+      video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("error", onError);
       try {
         engineRef.current?.destroy();
