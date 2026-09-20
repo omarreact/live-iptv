@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bookmark,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
+  ExternalLink,
   Film,
   Flame,
   Home,
@@ -14,8 +16,10 @@ import {
   Moon,
   Plus,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Tv,
+  X,
 } from "lucide-react";
 import { LogoMark } from "@/components/logo-mark";
 import type {
@@ -27,6 +31,69 @@ import type {
 import { cn } from "@/lib/utils";
 
 type FilterId = "home" | "shows" | "movies" | "animation" | "trending" | "midnight" | "list";
+
+type BrowseSort = "featured" | "latest" | "rating" | "az";
+type BrowseKind = "all" | "movie" | "series";
+type BrowseYear =
+  | "all"
+  | "2026"
+  | "2025"
+  | "2024"
+  | "2023"
+  | "2022"
+  | "2021"
+  | "2020"
+  | "2010s"
+  | "2000s"
+  | "1990s"
+  | "1980s";
+
+type FilteredResult = {
+  item: MovieBoxCatalogItem;
+  detail: MovieBoxDetailPayload | null;
+  sourceIndex: number;
+};
+
+const YEAR_OPTIONS: Array<{ value: BrowseYear; label: string }> = [
+  { value: "all", label: "All years" },
+  { value: "2026", label: "2026" },
+  { value: "2025", label: "2025" },
+  { value: "2024", label: "2024" },
+  { value: "2023", label: "2023" },
+  { value: "2022", label: "2022" },
+  { value: "2021", label: "2021" },
+  { value: "2020", label: "2020" },
+  { value: "2010s", label: "2010s" },
+  { value: "2000s", label: "2000s" },
+  { value: "1990s", label: "1990s" },
+  { value: "1980s", label: "1980s" },
+];
+
+const GENRE_OPTIONS = [
+  "all",
+  "Action",
+  "Adventure",
+  "Animation",
+  "Comedy",
+  "Crime",
+  "Drama",
+  "Fantasy",
+  "Horror",
+  "Romance",
+  "Sci-Fi",
+  "Thriller",
+] as const;
+
+const COUNTRY_OPTIONS = [
+  "all",
+  "United States",
+  "United Kingdom",
+  "India",
+  "Korea",
+  "Japan",
+  "Bangladesh",
+  "China",
+] as const;
 
 const FILTERS: Array<{
   id: FilterId;
@@ -135,7 +202,7 @@ function CatalogPoster({ item }: { item: MovieBoxCatalogItem }) {
             if (!cancelled) POSTER_CACHE.set(item.href, null);
           });
       },
-      { rootMargin: "320px 0px" },
+      { rootMargin: "900px 0px" },
     );
 
     observer.observe(node);
@@ -203,6 +270,75 @@ function CinemaCard({
         <p className="mt-2 line-clamp-1 text-sm font-medium text-fg">{cleanDisplayTitle(item.title)}</p>
         <p className="mt-0.5 text-xs text-subtle">
           {item.kind === "series" ? "Series" : item.kind === "movie" ? "Movie" : "Discover"}
+        </p>
+      </button>
+
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleList();
+        }}
+        className={cn(
+          "tv-focus absolute right-2 top-2 flex size-8 items-center justify-center rounded-full border backdrop-blur transition",
+          saved
+            ? "border-brand/40 bg-brand text-white"
+            : "border-white/10 bg-black/55 text-white/75 opacity-0 group-hover:opacity-100",
+        )}
+        aria-label={saved ? "Remove from My list" : "Add to My list"}
+      >
+        <Plus className={cn("size-4 transition-transform", saved && "rotate-45")} />
+      </button>
+    </article>
+  );
+}
+
+function FilteredCard({
+  result,
+  saved,
+  onOpen,
+  onToggleList,
+}: {
+  result: FilteredResult;
+  saved: boolean;
+  onOpen: () => void;
+  onToggleList: () => void;
+}) {
+  const { item, detail } = result;
+  const image = detail?.image ?? item.image;
+
+  return (
+    <article className="group relative min-w-0">
+      <button type="button" onClick={onOpen} className="tv-focus block w-full rounded-xl text-left">
+        <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-white/8 bg-elevated transition duration-200 group-hover:-translate-y-1 group-hover:border-white/20 group-hover:shadow-2xl">
+          {image ? (
+            <img
+              src={image}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              className="size-full object-cover transition duration-300 group-hover:scale-[1.035]"
+            />
+          ) : (
+            <CatalogPoster item={item} />
+          )}
+
+          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/10" />
+          <div className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-white/75 backdrop-blur">
+            {item.kind === "series" ? "Series" : "Movie"}
+          </div>
+          {detail?.rating ? (
+            <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-amber-200 backdrop-blur">
+              ★ {detail.rating.toFixed(1)}
+            </div>
+          ) : null}
+        </div>
+
+        <p className="mt-2 line-clamp-1 text-sm font-medium text-fg">{cleanDisplayTitle(item.title)}</p>
+        <p className="mt-0.5 line-clamp-1 text-xs text-subtle">
+          {detail?.year ?? (item.kind === "series" ? "Series" : "Movie")}
+          {detail?.genres?.[0] ? " • " + detail.genres[0] : ""}
         </p>
       </button>
 
@@ -305,6 +441,14 @@ export function EntertainmentHub() {
   const [featured, setFeatured] = useState<MovieBoxCatalogItem | null>(null);
   const [detail, setDetail] = useState<MovieBoxDetailPayload | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [browseKind, setBrowseKind] = useState<BrowseKind>("all");
+  const [browseYear, setBrowseYear] = useState<BrowseYear>("all");
+  const [browseGenre, setBrowseGenre] = useState<(typeof GENRE_OPTIONS)[number]>("all");
+  const [browseCountry, setBrowseCountry] = useState<(typeof COUNTRY_OPTIONS)[number]>("all");
+  const [browseSort, setBrowseSort] = useState<BrowseSort>("featured");
+  const [filteredResults, setFilteredResults] = useState<FilteredResult[]>([]);
+  const [filterLoading, setFilterLoading] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -382,6 +526,64 @@ export function EntertainmentHub() {
     return () => controller.abort();
   }, [featured?.href]);
 
+  const advancedFiltersActive =
+    browseKind !== "all" ||
+    browseYear !== "all" ||
+    browseGenre !== "all" ||
+    browseCountry !== "all" ||
+    browseSort !== "featured";
+
+  useEffect(() => {
+    if (!advancedFiltersActive) {
+      setFilteredResults([]);
+      setFilterLoading(false);
+      setFilterError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      kind: browseKind,
+      year: browseYear,
+      genre: browseGenre,
+      country: browseCountry,
+      sort: browseSort,
+    });
+
+    if (query.trim()) params.set("q", query.trim());
+
+    setFilterLoading(true);
+    setFilterError(null);
+
+    fetch("/api/catalog/moviebox/filter?" + params.toString(), {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Filtered catalog unavailable");
+        return response.json() as Promise<{ items?: FilteredResult[] }>;
+      })
+      .then((payload) => setFilteredResults(payload.items ?? []))
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setFilteredResults([]);
+        setFilterError(error instanceof Error ? error.message : "Filtered catalog unavailable");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setFilterLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [
+    advancedFiltersActive,
+    browseCountry,
+    browseGenre,
+    browseKind,
+    browseSort,
+    browseYear,
+    query,
+  ]);
+
   const allRows = catalog?.rows ?? [];
   const allItems = useMemo(() => dedupeItems(allRows), [allRows]);
   const catalogOnline = allItems.length > 0;
@@ -429,6 +631,14 @@ export function EntertainmentHub() {
   function openItem(item: MovieBoxCatalogItem) {
     setFeatured(item);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function clearAdvancedFilters() {
+    setBrowseKind("all");
+    setBrowseYear("all");
+    setBrowseGenre("all");
+    setBrowseCountry("all");
+    setBrowseSort("featured");
   }
 
   function browseCatalog() {
@@ -479,7 +689,7 @@ export function EntertainmentHub() {
               </span>
             </div>
             <p className="mt-2 text-[10px] leading-4 text-subtle">
-              MovieBox is the primary discovery source. CineplexBD is hidden until its service returns.
+              MovieBox supplies catalog metadata. Full-length playback is not proxied by Pinflix.
             </p>
           </div>
         </aside>
@@ -569,6 +779,18 @@ export function EntertainmentHub() {
                   </button>
 
                   {featured ? (
+                    <a
+                      href={featured.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="tv-focus inline-flex h-12 items-center gap-2 rounded-xl bg-white/10 px-5 text-sm font-semibold text-white backdrop-blur hover:bg-white/15"
+                    >
+                      <ExternalLink className="size-4" />
+                      Open on MovieBox
+                    </a>
+                  ) : null}
+
+                  {featured ? (
                     <button
                       type="button"
                       onClick={() => toggleList(featured)}
@@ -582,14 +804,153 @@ export function EntertainmentHub() {
 
                 <div className="mt-5 flex items-center gap-2 text-xs text-white/45">
                   <span className={cn("size-2 rounded-full", catalogOnline ? "bg-emerald-400" : "bg-white/25")} />
-                  <span>{catalogOnline ? "MovieBox discovery source connected" : "MovieBox discovery source unavailable"}</span>
+                  <span>{catalogOnline ? "MovieBox metadata connected — playback opens at the source" : "MovieBox discovery source unavailable"}</span>
                 </div>
               </div>
             </div>
           </section>
 
-          <div id="moviebox-catalog" className="relative z-10 -mt-16 space-y-10 pb-14">
-            {catalogLoading ? (
+          <div id="moviebox-catalog" className="relative z-10 -mt-10 pb-14">
+            <div className="sticky top-[68px] z-20 mx-4 mb-8 rounded-2xl border border-border bg-bg/95 p-3 shadow-2xl backdrop-blur-xl sm:mx-6 lg:mx-8">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="size-4 text-brand" />
+                  <span className="text-sm font-semibold">Filter & sort</span>
+                  {filterLoading ? <LoaderCircle className="size-3.5 animate-spin text-brand" /> : null}
+                </div>
+
+                {advancedFiltersActive ? (
+                  <button
+                    type="button"
+                    onClick={clearAdvancedFilters}
+                    className="tv-focus inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs text-muted hover:bg-surface hover:text-fg"
+                  >
+                    <X className="size-3.5" />
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                <select
+                  value={browseKind}
+                  onChange={(event) => setBrowseKind(event.target.value as BrowseKind)}
+                  aria-label="Content type"
+                  className="h-10 rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-brand"
+                >
+                  <option value="all">All types</option>
+                  <option value="movie">Movies</option>
+                  <option value="series">TV series</option>
+                </select>
+
+                <select
+                  value={browseYear}
+                  onChange={(event) => setBrowseYear(event.target.value as BrowseYear)}
+                  aria-label="Year"
+                  className="h-10 rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-brand"
+                >
+                  {YEAR_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={browseGenre}
+                  onChange={(event) =>
+                    setBrowseGenre(event.target.value as (typeof GENRE_OPTIONS)[number])
+                  }
+                  aria-label="Genre"
+                  className="h-10 rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-brand"
+                >
+                  {GENRE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option === "all" ? "All genres" : option}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={browseCountry}
+                  onChange={(event) =>
+                    setBrowseCountry(event.target.value as (typeof COUNTRY_OPTIONS)[number])
+                  }
+                  aria-label="Country"
+                  className="h-10 rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-brand"
+                >
+                  {COUNTRY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option === "all" ? "All countries" : option}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={browseSort}
+                  onChange={(event) => setBrowseSort(event.target.value as BrowseSort)}
+                  aria-label="Sort by"
+                  className="col-span-2 h-10 rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-brand sm:col-span-1"
+                >
+                  <option value="featured">For You</option>
+                  <option value="latest">Latest</option>
+                  <option value="rating">Highest rating</option>
+                  <option value="az">A–Z</option>
+                </select>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-subtle">
+                {browseYear !== "all" ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-1.5">
+                    <CalendarDays className="size-3.5" />
+                    {browseYear}
+                  </span>
+                ) : null}
+                {browseSort === "latest" ? (
+                  <span className="rounded-full bg-brand/10 px-2.5 py-1.5 text-brand">Newest first</span>
+                ) : null}
+                {advancedFiltersActive && !filterLoading ? (
+                  <span className="rounded-full bg-surface px-2.5 py-1.5">
+                    {filteredResults.length} matches
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-10">
+            {advancedFiltersActive ? (
+              filterLoading ? (
+                <div className="mx-4 flex min-h-52 items-center justify-center rounded-2xl border border-border bg-surface/90 sm:mx-6 lg:mx-8">
+                  <div className="text-center text-sm text-muted">
+                    <LoaderCircle className="mx-auto mb-3 size-6 animate-spin text-brand" />
+                    Applying filters…
+                  </div>
+                </div>
+              ) : filterError ? (
+                <div className="mx-4 rounded-2xl border border-border bg-surface/80 px-6 py-12 text-center sm:mx-6 lg:mx-8">
+                  <p className="font-semibold">Could not load filtered catalog</p>
+                  <p className="mt-1 text-sm text-muted">{filterError}</p>
+                </div>
+              ) : filteredResults.length ? (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-7 px-4 sm:grid-cols-3 sm:px-6 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 lg:px-8">
+                  {filteredResults.map((result) => (
+                    <FilteredCard
+                      key={result.item.id}
+                      result={result}
+                      saved={savedIds.has(result.item.id)}
+                      onOpen={() => openItem(result.item)}
+                      onToggleList={() => toggleList(result.item)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="mx-4 rounded-2xl border border-dashed border-border bg-surface/70 px-6 py-16 text-center sm:mx-6 lg:mx-8">
+                  <Film className="mx-auto size-8 text-subtle" />
+                  <p className="mt-3 font-semibold">No matching titles</p>
+                  <p className="mt-1 text-sm text-muted">Try another year, genre, country, or type.</p>
+                </div>
+              )
+            ) : catalogLoading ? (
               <div className="mx-4 flex min-h-52 items-center justify-center rounded-2xl border border-border bg-surface/90 sm:mx-6 lg:mx-8">
                 <div className="text-center text-sm text-muted">
                   <LoaderCircle className="mx-auto mb-3 size-6 animate-spin text-brand" />
@@ -615,6 +976,7 @@ export function EntertainmentHub() {
                 </p>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

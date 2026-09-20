@@ -58,6 +58,68 @@ const PAGE_SPECS: PageSpec[] = [
   },
 ];
 
+const GENRES = new Set([
+  "Action",
+  "Adventure",
+  "Animation",
+  "Biography",
+  "Comedy",
+  "Crime",
+  "Documentary",
+  "Drama",
+  "Family",
+  "Fantasy",
+  "Film-Noir",
+  "Game-Show",
+  "History",
+  "Horror",
+  "Music",
+  "Musical",
+  "Mystery",
+  "News",
+  "Reality-TV",
+  "Romance",
+  "Sci-Fi",
+  "Short",
+  "Sport",
+  "Talk-Show",
+  "Thriller",
+  "War",
+  "Western",
+]);
+
+const COUNTRIES = new Set([
+  "United States",
+  "United Kingdom",
+  "Korea",
+  "Japan",
+  "Bangladesh",
+  "China",
+  "Egypt",
+  "France",
+  "Germany",
+  "India",
+  "Indonesia",
+  "Iraq",
+  "Italy",
+  "Ivory Coast",
+  "Kenya",
+  "Lebanon",
+  "Mexico",
+  "Morocco",
+  "Nigeria",
+  "Pakistan",
+  "Philippines",
+  "Russia",
+  "Saudi Arabia",
+  "South Africa",
+  "Spain",
+  "Syria",
+  "Thailand",
+  "Malaysia",
+  "Turkey",
+]);
+
 const BLOCKED_TERMS = [
   "porn",
   "xxx",
@@ -273,34 +335,14 @@ function parseDetail(html: string, href: string): MovieBoxDetailPayload {
   const image = meta(html, "og:image") || meta(html, "twitter:image") || null;
   const blocks = detailText(html);
 
-  const year = blocks.find((value) => /^(19|20)\d{2}$/.test(value)) ?? null;
-  const runtime = blocks.find((value) => /^\d+\s*h(?:\s*\d+\s*m)?$/i.test(value)) ?? null;
+  const yearIndex = blocks.findIndex((value) => /^(19|20)\d{2}$/.test(value));
+  const year = yearIndex >= 0 ? blocks[yearIndex] : null;
+  const detailWindow = yearIndex >= 0 ? blocks.slice(yearIndex + 1, yearIndex + 10) : blocks.slice(0, 10);
+  const runtime = detailWindow.find((value) => /^\d+\s*h(?:\s*\d+\s*m)?$/i.test(value)) ?? null;
+  const country = detailWindow.find((value) => COUNTRIES.has(value)) ?? null;
+  const genres = detailWindow.filter((value) => GENRES.has(value)).slice(0, 4);
   const ratingText = blocks.find((value) => /^\d(?:\.\d)?\s*\/\s*10$/.test(value));
   const rating = ratingText ? Number.parseFloat(ratingText) : null;
-
-  const ignored = new Set([
-    "Details",
-    "Watch Online",
-    "Watch in App",
-    "Watch on TV",
-    "Episodes",
-    "Trailer",
-    "Top Cast",
-    "User Review",
-    title,
-    year ?? "",
-    runtime ?? "",
-    ratingText ?? "",
-  ]);
-
-  const genres = blocks
-    .filter((value) => !ignored.has(value))
-    .filter((value) => /^[A-Za-z][A-Za-z &-]{2,28}$/.test(value))
-    .filter(
-      (value) =>
-        !["United States", "United Kingdom", "India", "Korea", "China", "Japan"].includes(value),
-    )
-    .slice(0, 4);
 
   return {
     title,
@@ -310,6 +352,7 @@ function parseDetail(html: string, href: string): MovieBoxDetailPayload {
     rating: Number.isFinite(rating) ? rating : null,
     runtime,
     genres,
+    country,
     href,
   };
 }
