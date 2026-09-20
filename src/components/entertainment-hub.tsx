@@ -32,6 +32,69 @@ import { cn } from "@/lib/utils";
 
 type FilterId = "home" | "shows" | "movies" | "animation" | "trending" | "midnight" | "list";
 
+type BrowseSort = "featured" | "latest" | "rating" | "az";
+type BrowseKind = "all" | "movie" | "series";
+type BrowseYear =
+  | "all"
+  | "2026"
+  | "2025"
+  | "2024"
+  | "2023"
+  | "2022"
+  | "2021"
+  | "2020"
+  | "2010s"
+  | "2000s"
+  | "1990s"
+  | "1980s";
+
+type FilteredResult = {
+  item: MovieBoxCatalogItem;
+  detail: MovieBoxDetailPayload | null;
+  sourceIndex: number;
+};
+
+const YEAR_OPTIONS: Array<{ value: BrowseYear; label: string }> = [
+  { value: "all", label: "All years" },
+  { value: "2026", label: "2026" },
+  { value: "2025", label: "2025" },
+  { value: "2024", label: "2024" },
+  { value: "2023", label: "2023" },
+  { value: "2022", label: "2022" },
+  { value: "2021", label: "2021" },
+  { value: "2020", label: "2020" },
+  { value: "2010s", label: "2010s" },
+  { value: "2000s", label: "2000s" },
+  { value: "1990s", label: "1990s" },
+  { value: "1980s", label: "1980s" },
+];
+
+const GENRE_OPTIONS = [
+  "all",
+  "Action",
+  "Adventure",
+  "Animation",
+  "Comedy",
+  "Crime",
+  "Drama",
+  "Fantasy",
+  "Horror",
+  "Romance",
+  "Sci-Fi",
+  "Thriller",
+] as const;
+
+const COUNTRY_OPTIONS = [
+  "all",
+  "United States",
+  "United Kingdom",
+  "India",
+  "Korea",
+  "Japan",
+  "Bangladesh",
+  "China",
+] as const;
+
 const FILTERS: Array<{
   id: FilterId;
   label: string;
