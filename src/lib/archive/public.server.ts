@@ -11,6 +11,8 @@ const BLOCKED_TERMS = [
   "xxx",
   "nude",
   "nudity",
+  "nudist",
+  "naked",
   "erotic",
   "fetish",
   "striptease",
