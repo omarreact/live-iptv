@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Bookmark,
   ChevronLeft,
@@ -13,17 +12,12 @@ import {
   Info,
   LoaderCircle,
   Moon,
-  Play,
   Plus,
   Search,
   Sparkles,
   Tv,
-  Wifi,
-  WifiOff,
 } from "lucide-react";
 import { LogoMark } from "@/components/logo-mark";
-import { MediaBrowser } from "@/components/media-browser";
-import type { MediaBrowsePayload, MediaItem, MediaSourceSummary } from "@/lib/media/types";
 import type {
   MovieBoxCatalogItem,
   MovieBoxCatalogPayload,
@@ -33,11 +27,6 @@ import type {
 import { cn } from "@/lib/utils";
 
 type FilterId = "home" | "shows" | "movies" | "animation" | "trending" | "midnight" | "list";
-
-type Match = {
-  item: MediaItem;
-  source: string;
-};
 
 const FILTERS: Array<{
   id: FilterId;
@@ -56,23 +45,9 @@ const FILTERS: Array<{
 const LIST_KEY = "pinflix:entertainment:list";
 const POSTER_CACHE = new Map<string, string | null>();
 
-function normalizeTitle(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/\[[^\]]+\]/g, " ")
-    .replace(/\([^)]*(?:19|20)\d{2}[^)]*\)/g, " ")
-    .replace(/\b(?:19|20)\d{2}\b/g, " ")
-    .replace(
-      /\b(?:hindi|english|bangla|bengali|dual audio|dubbed|webrip|web-dl|bluray|blu-ray|hdrip|hd|cam|1080p|720p|480p|2160p|4k)\b/g,
-      " ",
-    )
-    .replace(/[^a-z0-9]+/g, "")
-    .trim();
-}
-
 function cleanDisplayTitle(value: string): string {
   return value
+    .replace(/^Limited Free\s+/i, "")
     .replace(/\[[^\]]+\]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -84,7 +59,7 @@ function matchesFilter(row: MovieBoxCatalogRow, filter: FilterId): boolean {
   if (filter === "shows") return row.kind === "series" || text.includes("drama") || text.includes("tv");
   if (filter === "movies") return row.kind === "movie" || text.includes("movie") || text.includes("hollywood");
   if (filter === "animation") return text.includes("anime") || text.includes("animated") || text.includes("animation");
-  if (filter === "trending") return text.includes("trending") || text.includes("recent") || text.includes("free now");
+  if (filter === "trending") return text.includes("trending") || text.includes("recent") || text.includes("top");
   if (filter === "midnight") return text.includes("horror") || text.includes("zombie") || text.includes("apocalypse");
   return true;
 }
@@ -187,7 +162,9 @@ function CatalogPoster({ item }: { item: MovieBoxCatalogItem }) {
         />
       ) : (
         <div className="pinflix-shimmer flex size-full items-end p-3">
-          <p className="line-clamp-4 text-sm font-semibold leading-snug text-white/85">{item.title}</p>
+          <p className="line-clamp-4 text-sm font-semibold leading-snug text-white/85">
+            {cleanDisplayTitle(item.title)}
+          </p>
         </div>
       )}
     </div>
@@ -196,13 +173,11 @@ function CatalogPoster({ item }: { item: MovieBoxCatalogItem }) {
 
 function CinemaCard({
   item,
-  match,
   saved,
   onOpen,
   onToggleList,
 }: {
   item: MovieBoxCatalogItem;
-  match?: Match;
   saved: boolean;
   onOpen: () => void;
   onToggleList: () => void;
@@ -216,25 +191,18 @@ function CinemaCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/10" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
             <span className="flex size-11 items-center justify-center rounded-full bg-white text-black shadow-xl">
-              {match ? <Play className="ml-0.5 size-4 fill-current" /> : <Info className="size-4" />}
+              <Info className="size-4" />
             </span>
           </div>
 
-          <span
-            className={cn(
-              "absolute left-2 top-2 rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] backdrop-blur",
-              match
-                ? "bg-emerald-400/90 text-black"
-                : "border border-white/10 bg-black/55 text-white/70",
-            )}
-          >
-            {match ? (match.item.type === "directory" ? "Series" : "Play") : "Catalog"}
+          <span className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/55 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-white/70 backdrop-blur">
+            MovieBox
           </span>
         </div>
 
         <p className="mt-2 line-clamp-1 text-sm font-medium text-fg">{cleanDisplayTitle(item.title)}</p>
         <p className="mt-0.5 text-xs text-subtle">
-          {match ? "Available in Pinflix" : item.kind === "series" ? "Series" : item.kind === "movie" ? "Movie" : "Discover"}
+          {item.kind === "series" ? "Series" : item.kind === "movie" ? "Movie" : "Discover"}
         </p>
       </button>
 
@@ -260,13 +228,11 @@ function CinemaCard({
 
 function CinemaRow({
   row,
-  matches,
   savedIds,
   onOpen,
   onToggleList,
 }: {
   row: MovieBoxCatalogRow;
-  matches: Map<string, Match>;
   savedIds: Set<string>;
   onOpen: (item: MovieBoxCatalogItem) => void;
   onToggleList: (item: MovieBoxCatalogItem) => void;
@@ -290,7 +256,7 @@ function CinemaRow({
           <h2 className="text-lg font-semibold tracking-[-0.02em] sm:text-xl">{row.title}</h2>
           <p className="mt-0.5 text-xs text-subtle">{row.items.length} titles</p>
         </div>
-        <span className="text-xs text-muted">More</span>
+        <span className="text-xs text-muted">MovieBox catalog</span>
       </div>
 
       <div className="relative">
@@ -311,7 +277,6 @@ function CinemaRow({
             <CinemaCard
               key={item.id}
               item={item}
-              match={matches.get(normalizeTitle(item.title))}
               saved={savedIds.has(item.id)}
               onOpen={() => onOpen(item)}
               onToggleList={() => onToggleList(item)}
@@ -333,16 +298,12 @@ function CinemaRow({
 }
 
 export function EntertainmentHub() {
-  const router = useRouter();
   const [catalog, setCatalog] = useState<MovieBoxCatalogPayload | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [filter, setFilter] = useState<FilterId>("home");
   const [query, setQuery] = useState("");
   const [featured, setFeatured] = useState<MovieBoxCatalogItem | null>(null);
   const [detail, setDetail] = useState<MovieBoxDetailPayload | null>(null);
-  const [matches, setMatches] = useState<Map<string, Match>>(new Map());
-  const [bridgeOnline, setBridgeOnline] = useState(false);
-  const [bridgeTarget, setBridgeTarget] = useState<{ path: string; query: string } | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -398,47 +359,6 @@ export function EntertainmentHub() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function connectBridge() {
-      try {
-        const sourceResponse = await fetch("/api/media/sources", { cache: "no-store" });
-        if (!sourceResponse.ok) throw new Error("bridge unavailable");
-        const sourcePayload = (await sourceResponse.json()) as { sources?: MediaSourceSummary[] };
-        const cineplex = (sourcePayload.sources ?? []).find((source) => source.id === "cineplexbd");
-        if (!cineplex) throw new Error("cineplex unavailable");
-
-        const params = new URLSearchParams({ source: cineplex.id, path: "" });
-        const browseResponse = await fetch("/api/media/browse?" + params.toString(), {
-          cache: "no-store",
-        });
-        if (!browseResponse.ok) throw new Error("cineplex browse unavailable");
-        const browse = (await browseResponse.json()) as MediaBrowsePayload;
-
-        const next = new Map<string, Match>();
-        for (const item of browse.items ?? []) {
-          const key = normalizeTitle(item.name);
-          if (!key || next.has(key)) continue;
-          next.set(key, { item, source: cineplex.id });
-        }
-
-        if (cancelled) return;
-        setMatches(next);
-        setBridgeOnline(true);
-      } catch {
-        if (cancelled) return;
-        setMatches(new Map());
-        setBridgeOnline(false);
-      }
-    }
-
-    void connectBridge();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!featured?.href) {
       setDetail(null);
       return;
@@ -464,12 +384,15 @@ export function EntertainmentHub() {
 
   const allRows = catalog?.rows ?? [];
   const allItems = useMemo(() => dedupeItems(allRows), [allRows]);
+  const catalogOnline = allItems.length > 0;
 
   const visibleRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
     if (needle) {
-      const items = allItems.filter((item) => item.title.toLowerCase().includes(needle)).slice(0, 60);
+      const items = allItems
+        .filter((item) => cleanDisplayTitle(item.title).toLowerCase().includes(needle))
+        .slice(0, 60);
       return [
         {
           id: "search-results",
@@ -494,7 +417,6 @@ export function EntertainmentHub() {
     return allRows.filter((row) => matchesFilter(row, filter));
   }, [allItems, allRows, filter, query, savedIds]);
 
-  const featuredMatch = featured ? matches.get(normalizeTitle(featured.title)) : undefined;
   const heroImage = detail?.image ?? featured?.image ?? null;
 
   function toggleList(item: MovieBoxCatalogItem) {
@@ -506,36 +428,11 @@ export function EntertainmentHub() {
 
   function openItem(item: MovieBoxCatalogItem) {
     setFeatured(item);
-    const match = matches.get(normalizeTitle(item.title));
-    if (!match) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    if (match.item.type === "video") {
-      const params = new URLSearchParams({
-        source: match.source,
-        path: match.item.path,
-        title: cleanDisplayTitle(item.title),
-      });
-      router.push("/watch/media?" + params.toString());
-      return;
-    }
-
-    setBridgeTarget({ path: match.item.path, query: "" });
-    window.setTimeout(() => {
-      document.getElementById("cineplexbd-library")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function heroAction() {
-    if (!featured) return;
-    if (featuredMatch) {
-      openItem(featured);
-      return;
-    }
-    setBridgeTarget({ path: "", query: cleanDisplayTitle(featured.title) });
-    document.getElementById("cineplexbd-library")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  function browseCatalog() {
+    document.getElementById("moviebox-catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
@@ -564,9 +461,7 @@ export function EntertainmentHub() {
                   }}
                   className={cn(
                     "tv-focus flex h-11 items-center gap-3 rounded-xl px-3 text-left text-sm font-medium",
-                    active
-                      ? "bg-elevated text-brand"
-                      : "text-muted hover:bg-surface hover:text-fg",
+                    active ? "bg-elevated text-brand" : "text-muted hover:bg-surface hover:text-fg",
                   )}
                 >
                   <Icon className="size-4" />
@@ -578,17 +473,13 @@ export function EntertainmentHub() {
 
           <div className="border-t border-border p-4">
             <div className="flex items-center gap-2 text-xs">
-              {bridgeOnline ? (
-                <Wifi className="size-3.5 text-emerald-400" />
-              ) : (
-                <WifiOff className="size-3.5 text-subtle" />
-              )}
-              <span className={bridgeOnline ? "text-emerald-300" : "text-subtle"}>
-                {bridgeOnline ? "CineplexBD connected" : "CineplexBD bridge offline"}
+              <span className={cn("size-2 rounded-full", catalogOnline ? "bg-emerald-400" : "bg-white/20")} />
+              <span className={catalogOnline ? "text-emerald-300" : "text-subtle"}>
+                {catalogOnline ? "MovieBox catalog live" : "MovieBox catalog unavailable"}
               </span>
             </div>
             <p className="mt-2 text-[10px] leading-4 text-subtle">
-              Public catalog metadata is separated from playback. Pinflix only plays configured sources.
+              MovieBox is the primary discovery source. CineplexBD is hidden until its service returns.
             </p>
           </div>
         </aside>
@@ -606,7 +497,7 @@ export function EntertainmentHub() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search movies and TV shows"
+                  placeholder="Search the MovieBox catalog"
                   aria-label="Search entertainment"
                   className="h-11 w-full rounded-full border border-border bg-surface pl-11 pr-4 text-sm outline-none transition placeholder:text-subtle hover:border-border-strong focus:border-brand focus:ring-2 focus:ring-brand/15"
                 />
@@ -645,11 +536,11 @@ export function EntertainmentHub() {
               <div className="max-w-2xl">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand">
                   <Sparkles className="size-4" />
-                  {featured?.section ?? "Pinflix Entertainment"}
+                  {featured?.section ?? "MovieBox discovery"}
                 </div>
 
                 <h1 className="mt-3 text-4xl font-black leading-[1.02] tracking-[-0.055em] sm:text-5xl lg:text-6xl">
-                  {detail?.title ?? featured?.title ?? "Movies & Web Series"}
+                  {detail?.title ?? (featured ? cleanDisplayTitle(featured.title) : "Movies & Web Series")}
                 </h1>
 
                 <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-white/68">
@@ -657,31 +548,24 @@ export function EntertainmentHub() {
                   {detail?.year ? <span>{detail.year}</span> : null}
                   {detail?.runtime ? <span>{detail.runtime}</span> : null}
                   {detail?.genres?.slice(0, 3).map((genre) => <span key={genre}>{genre}</span>)}
-                  {featured ? <span>{featured.kind === "series" ? "Series" : featured.kind === "movie" ? "Movie" : "Entertainment"}</span> : null}
+                  {featured ? (
+                    <span>{featured.kind === "series" ? "Series" : featured.kind === "movie" ? "Movie" : "Entertainment"}</span>
+                  ) : null}
                 </div>
 
                 <p className="mt-4 max-w-xl text-sm leading-7 text-white/68 sm:text-base">
                   {detail?.description ||
-                    "Discover titles from the public MovieBox catalog. Pinflix only enables playback when a title matches a configured CineplexBD or other authorized media source."}
+                    "Browse movies, TV shows, animation and trending titles from the public MovieBox catalog inside Pinflix."}
                 </p>
 
                 <div className="mt-7 flex flex-wrap gap-3">
                   <button
                     type="button"
-                    onClick={heroAction}
-                    className={cn(
-                      "tv-focus inline-flex h-12 items-center gap-2 rounded-xl px-5 text-sm font-semibold",
-                      featuredMatch
-                        ? "bg-white text-black hover:bg-white/90"
-                        : "border border-white/15 bg-black/45 text-white hover:bg-black/65",
-                    )}
+                    onClick={browseCatalog}
+                    className="tv-focus inline-flex h-12 items-center gap-2 rounded-xl bg-white px-5 text-sm font-semibold text-black hover:bg-white/90"
                   >
-                    {featuredMatch ? <Play className="size-4 fill-current" /> : <Search className="size-4" />}
-                    {featuredMatch
-                      ? featuredMatch.item.type === "directory"
-                        ? "Browse episodes"
-                        : "Play in Pinflix"
-                      : "Find on CineplexBD"}
+                    <Film className="size-4" />
+                    Browse catalog
                   </button>
 
                   {featured ? (
@@ -696,29 +580,20 @@ export function EntertainmentHub() {
                   ) : null}
                 </div>
 
-                <div className="mt-5 flex items-center gap-2 text-xs">
-                  {featuredMatch ? (
-                    <>
-                      <span className="size-2 rounded-full bg-emerald-400" />
-                      <span className="text-emerald-300">Matched with CineplexBD</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="size-2 rounded-full bg-white/25" />
-                      <span className="text-white/45">Catalog metadata only</span>
-                    </>
-                  )}
+                <div className="mt-5 flex items-center gap-2 text-xs text-white/45">
+                  <span className={cn("size-2 rounded-full", catalogOnline ? "bg-emerald-400" : "bg-white/25")} />
+                  <span>{catalogOnline ? "MovieBox discovery source connected" : "MovieBox discovery source unavailable"}</span>
                 </div>
               </div>
             </div>
           </section>
 
-          <div className="relative z-10 -mt-16 space-y-10 pb-14">
+          <div id="moviebox-catalog" className="relative z-10 -mt-16 space-y-10 pb-14">
             {catalogLoading ? (
               <div className="mx-4 flex min-h-52 items-center justify-center rounded-2xl border border-border bg-surface/90 sm:mx-6 lg:mx-8">
                 <div className="text-center text-sm text-muted">
                   <LoaderCircle className="mx-auto mb-3 size-6 animate-spin text-brand" />
-                  Building your cinema…
+                  Loading MovieBox catalog…
                 </div>
               </div>
             ) : visibleRows.some((row) => row.items.length) ? (
@@ -726,7 +601,6 @@ export function EntertainmentHub() {
                 <CinemaRow
                   key={row.id}
                   row={row}
-                  matches={matches}
                   savedIds={savedIds}
                   onOpen={openItem}
                   onToggleList={toggleList}
@@ -741,19 +615,6 @@ export function EntertainmentHub() {
                 </p>
               </div>
             )}
-
-            <section id="cineplexbd-library" className="scroll-mt-24 px-4 pt-2 sm:px-6 lg:px-8">
-              <MediaBrowser
-                key={(bridgeTarget?.path ?? "") + "|" + (bridgeTarget?.query ?? "")}
-                preferredSourceId="cineplexbd"
-                sourceIds={["cineplexbd"]}
-                initialPath={bridgeTarget?.path ?? ""}
-                initialQuery={bridgeTarget?.query ?? ""}
-                eyebrow="CineplexBD library"
-                title="Playable movies & web series"
-                description="This is the playback library. Titles above are public discovery metadata; only items available here are opened in the Pinflix player."
-              />
-            </section>
           </div>
         </div>
       </div>
