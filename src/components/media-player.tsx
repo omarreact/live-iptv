@@ -67,7 +67,7 @@ export function MediaPlayer({ source, path, title }: { source: string; path: str
       })
       .catch((reason: unknown) => {
         if ((reason as { name?: string })?.name !== "AbortError") {
-          setError("Pinflix could not resolve this video from the configured media bridge.");
+          setError("Pinflix could not resolve this video from the selected source.");
           setLoading(false);
         }
       });
@@ -102,7 +102,11 @@ export function MediaPlayer({ source, path, title }: { source: string; path: str
         return;
       }
       setLoading(false);
-      setError("This video could not be decoded in the browser. Check the bridge and FFmpeg configuration.");
+      setError(
+        media.transcodeUrl
+          ? "This video could not be decoded in the browser. Check the bridge and FFmpeg configuration."
+          : "This video could not be decoded directly in this browser. Try another playable title.",
+      );
     };
 
     const onPlaying = () => {
