@@ -173,18 +173,17 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       hasStarted = false;
       clearWatchdogs();
 
-      // Always prefer a ranked backup over retrying the same source through a
-      // different transport. This keeps a dead feed from trapping the viewer.
-      if (hasNextStream) {
-        setTransport("proxy");
-        setStreamIndex((n) => n + 1);
+      // A timeout or browser-level proxy failure may still be reachable from
+      // the viewer's network. Try that same clean HTTPS source directly before
+      // moving on, but do not retry explicit upstream HTTP failures directly.
+      if (transport === "proxy" && directEligible && !status) {
+        setTransport("direct");
         return;
       }
 
-      // On the final source, a clean HTTPS origin may still work directly when
-      // the server-side proxy path is the part that failed.
-      if (transport === "proxy" && directEligible && (!status || status >= 400)) {
-        setTransport("direct");
+      if (hasNextStream) {
+        setTransport("proxy");
+        setStreamIndex((n) => n + 1);
         return;
       }
 
