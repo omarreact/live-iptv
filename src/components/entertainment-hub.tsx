@@ -54,6 +54,7 @@ const FILTERS: Array<{
 ];
 
 const LIST_KEY = "pinflix:entertainment:list";
+const POSTER_CACHE = new Map<string, string | null>();
 
 function normalizeTitle(value: string): string {
   return value
@@ -84,7 +85,7 @@ function matchesFilter(row: MovieBoxCatalogRow, filter: FilterId): boolean {
   if (filter === "movies") return row.kind === "movie" || text.includes("movie") || text.includes("hollywood");
   if (filter === "animation") return text.includes("anime") || text.includes("animated") || text.includes("animation");
   if (filter === "trending") return text.includes("trending") || text.includes("recent") || text.includes("free now");
-  if (filter === "midnight") return text.includes("horror") || text.includes("midnight");
+  if (filter === "midnight") return text.includes("horror") || text.includes("zombie") || text.includes("apocalypse");
   return true;
 }
 
@@ -113,6 +114,86 @@ function fallbackRows(rows: MovieBoxCatalogRow[]): MovieBoxCatalogRow[] {
   ];
 }
 
+function CatalogPoster({ item }: { item: MovieBoxCatalogItem }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [image, setImage] = useState<string | null>(() => item.image ?? POSTER_CACHE.get(item.href) ?? null);
+  const [ready, setReady] = useState(Boolean(item.image));
+
+  useEffect(() => {
+    if (item.image) {
+      POSTER_CACHE.set(item.href, item.image);
+      setImage(item.image);
+      setReady(true);
+      return;
+    }
+
+    if (POSTER_CACHE.has(item.href)) {
+      const cached = POSTER_CACHE.get(item.href) ?? null;
+      setImage(cached);
+      setReady(Boolean(cached));
+      return;
+    }
+
+    const node = wrapRef.current;
+    if (!node) return;
+
+    let cancelled = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+
+        const params = new URLSearchParams({ href: item.href });
+        fetch("/api/catalog/moviebox/detail?" + params.toString(), { cache: "force-cache" })
+          .then(async (response) => {
+            if (!response.ok) throw new Error("poster unavailable");
+            return response.json() as Promise<MovieBoxDetailPayload>;
+          })
+          .then((payload) => {
+            if (cancelled) return;
+            const poster = payload.image || null;
+            POSTER_CACHE.set(item.href, poster);
+            setImage(poster);
+            setReady(Boolean(poster));
+          })
+          .catch(() => {
+            if (!cancelled) POSTER_CACHE.set(item.href, null);
+          });
+      },
+      { rootMargin: "320px 0px" },
+    );
+
+    observer.observe(node);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [item.href, item.image]);
+
+  return (
+    <div ref={wrapRef} className="size-full">
+      {image ? (
+        <img
+          src={image}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          className={cn(
+            "size-full object-cover transition duration-500 group-hover:scale-[1.035]",
+            ready ? "opacity-100" : "opacity-0",
+          )}
+          onLoad={() => setReady(true)}
+        />
+      ) : (
+        <div className="pinflix-shimmer flex size-full items-end p-3">
+          <p className="line-clamp-4 text-sm font-semibold leading-snug text-white/85">{item.title}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CinemaCard({
   item,
   match,
@@ -130,20 +211,7 @@ function CinemaCard({
     <article className="group relative w-[138px] shrink-0 sm:w-[154px] lg:w-[166px]">
       <button type="button" onClick={onOpen} className="tv-focus block w-full rounded-xl text-left">
         <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-white/8 bg-elevated transition duration-200 group-hover:-translate-y-1 group-hover:border-white/20 group-hover:shadow-2xl">
-          {item.image ? (
-            <img
-              src={item.image}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-              className="size-full object-cover transition duration-300 group-hover:scale-[1.035]"
-            />
-          ) : (
-            <div className="flex size-full items-end bg-[radial-gradient(circle_at_28%_18%,rgba(255,77,77,.26),transparent_28%),linear-gradient(145deg,#242429,#0b0b0d)] p-3">
-              <p className="line-clamp-4 text-sm font-semibold leading-snug text-white/85">{item.title}</p>
-            </div>
-          )}
+          <CatalogPoster item={item} />
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/10" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
