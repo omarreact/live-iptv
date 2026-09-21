@@ -25,8 +25,29 @@ const PLAYER_DOMAIN_TTL_MS = 5 * 60_000;
 const PLAYER_DOMAIN_FALLBACK = "https://mzfi.me";
 const SEARCH_REVALIDATE_SECONDS = 120;
 const DETAIL_REVALIDATE_SECONDS = 1_800;
+const FAILURE_BACKOFF_MS = 30_000;
 const HOME_MAX_SECTIONS = 10;
 const HOME_ITEMS_PER_SECTION = 12;
+
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+function trimCache<T>(cache: Map<string, CacheEntry<T>>, maxEntries = 80): void {
+  while (cache.size > maxEntries) {
+    const oldestKey = cache.keys().next().value as string | undefined;
+    if (!oldestKey) return;
+    cache.delete(oldestKey);
+  }
+}
+
+let homeCache: CacheEntry<MovieBoxHomeResponse> | null = null;
+let homeInflight: Promise<MovieBoxHomeResponse> | null = null;
+const categoryCache = new Map<string, CacheEntry<MovieBoxCategoryResponse>>();
+const categoryInflight = new Map<string, Promise<MovieBoxCategoryResponse>>();
+const detailCache = new Map<string, CacheEntry<unknown>>();
+const detailInflight = new Map<string, Promise<unknown>>();
 
 const PLAYER_HEADERS: Record<string, string> = {
   "User-Agent":
@@ -228,23 +249,43 @@ async function loadHome(): Promise<MovieBoxHomeResponse> {
   };
 }
 
-const loadCachedHome = unstable_cache(
-  loadHome,
-  ["moviebox-home-v3"],
-  { revalidate: METADATA_REVALIDATE_SECONDS },
-);
-
 export async function getHome(): Promise<MovieBoxHomeResponse> {
-  try {
-    return await loadCachedHome();
-  } catch (error: unknown) {
-    console.error("[moviebox] getHome failed", error);
-    return {
-      status: "error",
-      sections: [],
-      error: "Failed to load entertainment home",
-    };
-  }
+  const now = Date.now();
+  if (homeCache && homeCache.expiresAt > now) return homeCache.value;
+  if (homeInflight) return homeInflight;
+
+  const stale = homeCache?.value ?? null;
+
+  homeInflight = loadHome()
+    .then((value) => {
+      homeCache = {
+        value,
+        expiresAt: Date.now() + METADATA_REVALIDATE_SECONDS * 1_000,
+      };
+      return value;
+    })
+    .catch((error: unknown) => {
+      console.warn("[moviebox] home upstream unavailable", error);
+
+      if (stale) {
+        homeCache = {
+          value: stale,
+          expiresAt: Date.now() + FAILURE_BACKOFF_MS,
+        };
+        return stale;
+      }
+
+      return {
+        status: "error" as const,
+        sections: [],
+        error: "Entertainment is temporarily unavailable.",
+      };
+    })
+    .finally(() => {
+      homeInflight = null;
+    });
+
+  return homeInflight;
 }
 
 async function loadCategory(
@@ -287,11 +328,24 @@ async function loadCategory(
   };
 }
 
-const loadCachedCategory = unstable_cache(
-  loadCategory,
-  ["moviebox-category-v3"],
-  { revalidate: METADATA_REVALIDATE_SECONDS },
-);
+function categoryCacheKey(
+  tabId: number,
+  page: number,
+  perPage: number,
+  sort: string,
+  filters: MovieBoxFilters,
+): string {
+  return [
+    tabId,
+    page,
+    perPage,
+    sort,
+    filters.genre ?? "ALL",
+    filters.country ?? "ALL",
+    filters.year ?? "ALL",
+    filters.language ?? "ALL",
+  ].join("|");
+}
 
 async function safeCategory(
   tabId: number,
@@ -300,17 +354,51 @@ async function safeCategory(
   sort: string,
   filters: MovieBoxFilters,
 ): Promise<MovieBoxCategoryResponse> {
-  try {
-    return await loadCachedCategory(tabId, page, perPage, sort, filters);
-  } catch (error: unknown) {
-    console.error("[moviebox] category failed", { tabId, page, error });
-    return {
-      page,
-      per_page: perPage,
-      total: 0,
-      items: [],
-    };
-  }
+  const key = categoryCacheKey(tabId, page, perPage, sort, filters);
+  const cached = categoryCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const inflight = categoryInflight.get(key);
+  if (inflight) return inflight;
+
+  const stale = cached?.value ?? null;
+  const pending = loadCategory(tabId, page, perPage, sort, filters)
+    .then((value) => {
+      categoryCache.set(key, {
+        value,
+        expiresAt: Date.now() + METADATA_REVALIDATE_SECONDS * 1_000,
+      });
+      trimCache(categoryCache);
+      return value;
+    })
+    .catch((error: unknown) => {
+      console.warn("[moviebox] category upstream unavailable", {
+        tabId,
+        page,
+        error,
+      });
+
+      if (stale) {
+        categoryCache.set(key, {
+          value: stale,
+          expiresAt: Date.now() + FAILURE_BACKOFF_MS,
+        });
+        return stale;
+      }
+
+      return {
+        page,
+        per_page: perPage,
+        total: 0,
+        items: [],
+      };
+    })
+    .finally(() => {
+      categoryInflight.delete(key);
+    });
+
+  categoryInflight.set(key, pending);
+  return pending;
 }
 
 export async function getMovies(
@@ -455,14 +543,42 @@ async function loadDetail(slug: string): Promise<unknown> {
   return root?.data ?? payload;
 }
 
-const loadCachedDetail = unstable_cache(
-  loadDetail,
-  ["moviebox-detail-v3"],
-  { revalidate: DETAIL_REVALIDATE_SECONDS },
-);
-
 export async function getDetail(slug: string): Promise<unknown> {
-  return loadCachedDetail(slug);
+  const cached = detailCache.get(slug);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const inflight = detailInflight.get(slug);
+  if (inflight) return inflight;
+
+  const stale = cached?.value ?? null;
+  const pending = loadDetail(slug)
+    .then((value) => {
+      detailCache.set(slug, {
+        value,
+        expiresAt: Date.now() + DETAIL_REVALIDATE_SECONDS * 1_000,
+      });
+      trimCache(detailCache);
+      return value;
+    })
+    .catch((error: unknown) => {
+      console.warn("[moviebox] detail upstream unavailable", { slug, error });
+
+      if (stale !== null) {
+        detailCache.set(slug, {
+          value: stale,
+          expiresAt: Date.now() + FAILURE_BACKOFF_MS,
+        });
+        return stale;
+      }
+
+      return null;
+    })
+    .finally(() => {
+      detailInflight.delete(slug);
+    });
+
+  detailInflight.set(slug, pending);
+  return pending;
 }
 
 let cachedPlayerDomain: { value: string; expiresAt: number } | null = null;
