@@ -289,10 +289,10 @@ export function AdaptivePlayer({
           return;
         }
 
-        const module = await import("hls.js");
+        const hlsModule = await import("hls.js");
         if (cancelled) return;
 
-        const Hls = module.default;
+        const Hls = hlsModule.default;
         if (!Hls.isSupported()) {
           failCurrentSource("HLS playback is not supported by this browser.");
           return;
