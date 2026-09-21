@@ -6,7 +6,25 @@ import type {
   MovieBoxHomeResponse,
   MovieBoxItem,
   MovieBoxSection,
+  MovieBoxStreamResponse,
 } from "./types";
+
+const PLAYER_HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+  Accept: "application/json",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Cache-Control": "no-cache",
+  Pragma: "no-cache",
+  "X-Client-Info": '{"timezone":"Asia/Dhaka"}',
+  "X-Source": "",
+  "sec-ch-ua": '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"Windows"',
+  "sec-fetch-dest": "empty",
+  "sec-fetch-mode": "cors",
+  "sec-fetch-site": "same-origin",
+};
 
 export async function getHome(): Promise<MovieBoxHomeResponse> {
   try {
@@ -122,7 +140,6 @@ export async function getAnimation(page = 1, sort = "RECOMMEND") {
 }
 
 export async function search(query: string, page = 1) {
-  // Try the primary search endpoint used by the official app
   try {
     const data = await movieboxRequest<any>("/subject/search", {
       method: "POST",
@@ -146,7 +163,6 @@ export async function search(query: string, page = 1) {
       total: inner.total || items.length,
     };
   } catch (primaryErr) {
-    // Fallback: search-suggest style
     try {
       const data = await movieboxRequest<any>("/subject/search-suggest", {
         method: "POST",
@@ -168,4 +184,74 @@ export async function search(query: string, page = 1) {
       return { query, page, items: [], total: 0 };
     }
   }
+}
+
+export async function getDetail(slug: string) {
+  const data = await movieboxRequest<any>("/detail", {
+    searchParams: { detailPath: slug },
+  });
+  return data?.data ?? data;
+}
+
+export async function getStreamSources(
+  subjectId: string | number,
+  detailPath: string,
+  se = 1,
+  ep = 1,
+): Promise<MovieBoxStreamResponse> {
+  // 1. Resolve player domain
+  const domData = await movieboxRequest<any>("/media-player/get-domain");
+  const domain = String(domData?.data || "https://netfilm.world").replace(
+    /\/$/,
+    "",
+  );
+
+  // 2. Build the same Referer the real player uses
+  const playerReferer =
+    `${domain}/spa/videoPlayPage/movies/${detailPath}` +
+    `?id=${subjectId}&type=/movie/detail&detailSe=${se}&detailEp=${ep}&lang=en`;
+
+  const playUrl =
+    `${domain}/wefeed-h5api-bff/subject/play` +
+    `?subjectId=${subjectId}&se=${se}&ep=${ep}&detailPath=${encodeURIComponent(detailPath)}`;
+
+  const resp = await fetch(playUrl, {
+    headers: {
+      ...PLAYER_HEADERS,
+      Referer: playerReferer,
+    },
+    next: { revalidate: 0 },
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Stream upstream error: ${resp.status}`);
+  }
+
+  const json = await resp.json();
+  const data = json?.data || {};
+
+  const hasResource = Boolean(data.hasResource);
+  const sources = (data.streams || []).map((s: any) => ({
+    quality: s.resolutions ? `${s.resolutions}p` : undefined,
+    url: s.url,
+    type: (s.format || "mp4").toLowerCase(),
+    size: s.size,
+    duration: s.duration,
+    codec: s.codecName,
+  }));
+
+  return {
+    sources,
+    title: data.title,
+    subtitles: [],
+    // extra fields for debugging / UI
+    ...({
+      has_resource: hasResource,
+      hls: data.hls || [],
+      dash: data.dash || [],
+      free_episodes: data.freeNum,
+      limited: data.limited,
+      note: hasResource ? null : "No stream found for this episode.",
+    } as any),
+  };
 }
