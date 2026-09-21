@@ -228,19 +228,34 @@ export function EntertainmentDetailPlayer({
                 </p>
               ) : null}
 
+              {playback?.warnings?.length ? (
+                <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                  {playback.warnings.map((warning) => (
+                    <p key={warning}>{warning}</p>
+                  ))}
+                </div>
+              ) : null}
+
               {playback && playback.sources.length === 0 ? (
                 <div className="mt-5 rounded-xl border border-border bg-surface p-4">
-                  <p className="text-sm text-muted">
-                    No browser-playable source is currently available for this title.
+                  <p className="font-semibold text-fg">Playback unavailable</p>
+                  <p className="mt-1 text-sm text-muted">
+                    This provider did not return a source that Pinflix can safely play in the browser.
                   </p>
 
                   {detail.trailer ? (
-                    <video
-                      controls
-                      playsInline
-                      className="mt-3 w-full rounded-xl bg-black"
-                      src={detail.trailer}
-                    />
+                    <div className="mt-4">
+                      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-subtle">
+                        Trailer / preview
+                      </p>
+                      <video
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="w-full rounded-xl bg-black"
+                        src={detail.trailer}
+                      />
+                    </div>
                   ) : null}
                 </div>
               ) : null}
