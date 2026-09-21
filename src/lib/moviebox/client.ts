@@ -6,7 +6,8 @@ import type {
 } from "./types";
 
 const API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff";
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 10_000;
+const TOKEN_BOOTSTRAP_TIMEOUT_MS = 5_000;
 
 const DEFAULT_HEADERS: Record<string, string> = {
   "User-Agent":
@@ -69,6 +70,7 @@ function readBearerToken(headerValue: string): string | null {
 
 let cachedToken: string | null = null;
 let tokenFetchedAt = 0;
+let tokenBootstrapInflight: Promise<string> | null = null;
 const TOKEN_TTL_MS = 25 * 60 * 1000;
 
 function updateCachedToken(token: string | null): void {
@@ -77,42 +79,46 @@ function updateCachedToken(token: string | null): void {
   tokenFetchedAt = Date.now();
 }
 
-async function getBearerToken(): Promise<string> {
-  const now = Date.now();
+function currentToken(): string {
+  if (!cachedToken) return "";
+  if (Date.now() - tokenFetchedAt >= TOKEN_TTL_MS) return "";
+  return cachedToken;
+}
 
-  if (cachedToken && now - tokenFetchedAt < TOKEN_TTL_MS) {
-    return cachedToken;
+function captureResponseToken(response: Response): void {
+  const headerToken = response.headers.get("x-user");
+  if (headerToken) {
+    updateCachedToken(readBearerToken(headerToken));
   }
 
-  try {
-    const response = await fetch(`${API_BASE}/home?host=moviebox.ph`, {
-      headers: DEFAULT_HEADERS,
-      cache: "no-store",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+  const setCookie = response.headers.get("set-cookie") ?? "";
+  const cookieToken = setCookie.match(/token=([^;]+)/)?.[1] ?? null;
+  if (cookieToken) updateCachedToken(cookieToken);
+}
 
-    const headerToken = response.headers.get("x-user");
-    if (headerToken) {
-      const token = readBearerToken(headerToken);
-      if (token) {
-        updateCachedToken(token);
-        return token;
-      }
+async function bootstrapToken(): Promise<string> {
+  const existing = currentToken();
+  if (existing) return existing;
+  if (tokenBootstrapInflight) return tokenBootstrapInflight;
+
+  tokenBootstrapInflight = (async () => {
+    try {
+      const response = await fetch(`${API_BASE}/home?host=moviebox.ph`, {
+        headers: DEFAULT_HEADERS,
+        cache: "no-store",
+        signal: AbortSignal.timeout(TOKEN_BOOTSTRAP_TIMEOUT_MS),
+      });
+      captureResponseToken(response);
+    } catch (error: unknown) {
+      console.warn("[moviebox] optional token bootstrap unavailable", error);
     }
 
-    const setCookie = response.headers.get("set-cookie") ?? "";
-    const match = setCookie.match(/token=([^;]+)/);
-    const cookieToken = match?.[1] ?? null;
+    return currentToken();
+  })().finally(() => {
+    tokenBootstrapInflight = null;
+  });
 
-    if (cookieToken) {
-      updateCachedToken(cookieToken);
-      return cookieToken;
-    }
-  } catch (error: unknown) {
-    console.error("[moviebox] token acquisition failed", error);
-  }
-
-  return cachedToken ?? "";
+  return tokenBootstrapInflight;
 }
 
 export type MovieBoxRequestOptions = {
@@ -121,12 +127,38 @@ export type MovieBoxRequestOptions = {
   searchParams?: Record<string, string | number | undefined>;
 };
 
+function requestInit(
+  options: MovieBoxRequestOptions,
+  token: string,
+): RequestInit {
+  return {
+    method: options.method ?? "GET",
+    headers: {
+      ...DEFAULT_HEADERS,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ...(options.method === "POST" && options.body
+      ? { body: JSON.stringify(options.body) }
+      : {}),
+    cache: "no-store",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  };
+}
+
+async function requestOnce(
+  url: URL,
+  options: MovieBoxRequestOptions,
+  token: string,
+): Promise<Response> {
+  const response = await fetch(url, requestInit(options, token));
+  captureResponseToken(response);
+  return response;
+}
+
 export async function movieboxRequest<T = unknown>(
   path: string,
   options: MovieBoxRequestOptions = {},
 ): Promise<T> {
-  const token = await getBearerToken();
-
   const url = new URL(
     path.startsWith("http") ? path : `${API_BASE}${path}`,
   );
@@ -137,27 +169,17 @@ export async function movieboxRequest<T = unknown>(
     }
   }
 
-  const headers: Record<string, string> = {
-    ...DEFAULT_HEADERS,
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  // Most catalog endpoints are public. Do not block every cold Vercel
+  // invocation on an extra /home token request before making the real call.
+  let token = currentToken();
+  let response = await requestOnce(url, options, token);
 
-  const init: RequestInit = {
-    method: options.method ?? "GET",
-    headers,
-    cache: "no-store",
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  };
-
-  if (options.method === "POST" && options.body) {
-    init.body = JSON.stringify(options.body);
-  }
-
-  const response = await fetch(url, init);
-
-  const headerToken = response.headers.get("x-user");
-  if (headerToken) {
-    updateCachedToken(readBearerToken(headerToken));
+  // Only pay the token bootstrap cost when the upstream explicitly requires it.
+  if (response.status === 401 || response.status === 403) {
+    token = currentToken() || (await bootstrapToken());
+    if (token) {
+      response = await requestOnce(url, options, token);
+    }
   }
 
   if (!response.ok) {
