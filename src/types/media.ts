@@ -5,6 +5,11 @@ export type PlaybackSource = {
   protocol: PlaybackProtocol;
   quality?: string;
   mimeType?: string;
+
+  /**
+   * Server-only request headers for authorized upstreams.
+   * Never serialize these values to the browser.
+   */
   headers?: Record<string, string>;
 };
 
@@ -26,4 +31,9 @@ export type BrowserPlaybackResult = {
   title?: string;
   sources: BrowserPlaybackSource[];
   subtitles: PlaybackSubtitle[];
+
+  /**
+   * Non-sensitive playback limitations that are safe to show in the UI.
+   */
+  warnings?: string[];
 };
