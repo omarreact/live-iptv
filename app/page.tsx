@@ -1,8 +1,11 @@
 import { Search } from "lucide-react";
 import { unstable_cache } from "next/cache";
+import { headers } from "next/headers";
 import { ChannelRow } from "@/components/channel-row";
 import { RecentRow } from "@/components/recent-row";
+import { getBangladeshPrivatePreviews } from "@/lib/iptv/private-channels";
 import { getHomeData } from "@/lib/iptv/provider/iptv-org";
+import { trustedViewerCountry } from "@/lib/viewer-location";
 import type { HomeData } from "@/lib/iptv/types";
 
 export const revalidate = 600;
@@ -12,6 +15,9 @@ const getCachedHomeData = unstable_cache(getHomeData, ["pinflix-home-data-v2"], 
 });
 
 export default async function HomePage() {
+  const country = trustedViewerCountry(await headers());
+  const localChannels = country === "BD" ? getBangladeshPrivatePreviews() : [];
+
   const data: HomeData = await getCachedHomeData().catch((error: unknown) => {
     console.error("Unable to load the Pinflix home catalog", error);
     return { total: 0, countryCount: 0, featured: [], rows: [] };
@@ -46,6 +52,19 @@ export default async function HomePage() {
 
       <div className="mx-auto max-w-[1400px] space-y-9">
 <RecentRow />
+
+        {localChannels.length > 0 ? (
+          <ChannelRow
+            category={{
+              id: "bangladesh-local",
+              name: "Bangladesh Local",
+              description: "Local channels available through your Bangladesh connection.",
+              count: localChannels.length,
+            }}
+            channels={localChannels}
+            showAll={false}
+          />
+        ) : null}
 
         {data.featured.length > 0 ? (
           <ChannelRow
