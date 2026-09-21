@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { ChannelPreview } from "@/lib/iptv/types";
@@ -56,13 +55,11 @@ export function ChannelCard({
         )}
       >
         {showLogo ? (
-          <Image
+          <img
             src={channel.logo}
             alt=""
-            fill
-            sizes={featured ? "288px" : "176px"}
-            unoptimized
             loading="lazy"
+            decoding="async"
             referrerPolicy="no-referrer"
             onLoad={() => setLoadedLogo(channel.logo)}
             onError={() => {
@@ -70,7 +67,7 @@ export function ChannelCard({
               setLoadedLogo(channel.logo);
             }}
             className={cn(
-              "object-contain p-5 transition-[opacity,transform] duration-300 ease-out",
+              "absolute inset-0 size-full object-contain p-5 transition-[opacity,transform] duration-300 ease-out",
               loaded ? "pinflix-artwork-ready" : "pinflix-artwork-loading",
             )}
           />
