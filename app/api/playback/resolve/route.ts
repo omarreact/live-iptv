@@ -1,3 +1,4 @@
+import { assertSafeUrl } from "@/lib/iptv/proxy.server";
 import { getPlaybackProvider } from "@/lib/providers/registry.server";
 import type {
   BrowserPlaybackResult,
@@ -75,6 +76,14 @@ function toBrowserResult(
     const hasProtectedHeaders =
       source.headers && Object.keys(source.headers).length > 0;
 
+    let safeDirectUrl: string | null = null;
+    try {
+      safeDirectUrl = assertSafeUrl(source.url).href;
+    } catch {
+      warnings.push("An unsafe playback source was withheld.");
+      return [];
+    }
+
     const shouldRefreshThroughProxy =
       source.protocol === "mp4" &&
       (hasProtectedHeaders || providerId === "moviebox");
@@ -89,7 +98,7 @@ function toBrowserResult(
     }
 
     if (!hasProtectedHeaders) {
-      return [browserSource(source)];
+      return [browserSource(source, safeDirectUrl)];
     }
 
     warnings.push(
