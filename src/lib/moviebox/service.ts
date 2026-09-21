@@ -99,6 +99,7 @@ type PlayerData = {
   hasResource: boolean;
   title?: string;
   freeNum?: number;
+  maxResolution?: number;
   limited: boolean;
 };
 
@@ -655,6 +656,9 @@ function parsePlayerData(payload: unknown): PlayerData {
     hasResource: Boolean(data.hasResource),
     title: asString(data.title) ?? undefined,
     freeNum: asFiniteNumber(data.freeNum) ?? undefined,
+    maxResolution:
+      asFiniteNumber(nestedRecord(data, "playConfig")?.maxResolution) ??
+      undefined,
     limited: Boolean(data.limited),
   };
 }
@@ -735,8 +739,17 @@ function normalizeStreamData(
 ): MovieBoxStreamResponse {
   const sources: MovieBoxStreamSource[] = data.streams
     .filter(
-      (stream): stream is UpstreamPlayerStream & { url: string } =>
-        Boolean(stream.url),
+      (stream): stream is UpstreamPlayerStream & { url: string } => {
+        if (!stream.url) return false;
+
+        const resolution = asFiniteNumber(stream.resolutions);
+        return !(
+          data.maxResolution &&
+          data.maxResolution > 0 &&
+          resolution &&
+          resolution > data.maxResolution
+        );
+      },
     )
     .map((stream) => ({
       id: stream.id,
