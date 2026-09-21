@@ -10,6 +10,11 @@ import type { MediaDetail } from "@/types/catalog";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = {
+  title: "Watch | Pinflix Entertainment",
+  description: "Watch movies and series on a dedicated Pinflix playback page.",
+};
+
 type Params = Promise<{ slug: string }>;
 
 function fallbackItem(slug: string): MovieBoxItem {
