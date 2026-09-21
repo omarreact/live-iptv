@@ -8,10 +8,10 @@ import {
   Tv,
 } from "lucide-react";
 import type {
-  MovieBoxCategoryResponse,
-  MovieBoxHomeResponse,
-  MovieBoxItem,
-} from "@/lib/moviebox/types";
+  MediaCatalogPage,
+  MediaHome,
+  MediaItem,
+} from "@/types/catalog";
 import { cn } from "@/lib/utils";
 
 export type EntertainmentView = "home" | "movies" | "series" | "animation";
@@ -57,7 +57,7 @@ function paramsHref(
   return value ? `/entertainment?${value}` : "/entertainment";
 }
 
-function titleMeta(item: MovieBoxItem): string {
+function titleMeta(item: MediaItem): string {
   return [item.year, item.rating ? `★ ${item.rating}` : null]
     .filter(Boolean)
     .join(" · ");
@@ -67,16 +67,16 @@ function PosterCard({
   item,
   context,
 }: {
-  item: MovieBoxItem;
+  item: MediaItem;
   context: CatalogContext;
 }) {
   const content = (
     <>
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition duration-200 group-hover:-translate-y-1 group-hover:border-border-strong group-hover:shadow-xl">
-        {item.poster_url ? (
+        {item.poster ? (
           <img
-            src={item.poster_url}
-            alt={item.name}
+            src={item.poster}
+            alt={item.title}
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
@@ -84,7 +84,7 @@ function PosterCard({
           />
         ) : (
           <div className="flex size-full items-end bg-gradient-to-br from-white/10 to-transparent p-4">
-            <span className="text-sm font-semibold text-fg">{item.name}</span>
+            <span className="text-sm font-semibold text-fg">{item.title}</span>
           </div>
         )}
 
@@ -102,19 +102,19 @@ function PosterCard({
       </div>
 
       <h3 className="mt-2 line-clamp-1 text-sm font-semibold text-fg">
-        {item.name}
+        {item.title}
       </h3>
       <p className="mt-0.5 min-h-4 text-xs text-muted">{titleMeta(item)}</p>
     </>
   );
 
-  if (!item.slug) {
+  if (!item.detailKey) {
     return <div className="group min-w-0 text-left">{content}</div>;
   }
 
   return (
     <Link
-      href={paramsHref(context, { detail: item.slug })}
+      href={paramsHref(context, { detail: item.detailKey })}
       scroll={false}
       className="group min-w-0 text-left"
     >
@@ -127,14 +127,14 @@ function PosterGrid({
   items,
   context,
 }: {
-  items: MovieBoxItem[];
+  items: MediaItem[];
   context: CatalogContext;
 }) {
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
       {items.map((item, index) => (
         <PosterCard
-          key={String(item.subject_id || item.slug || item.name) + "-" + index}
+          key={String(item.id || item.detailKey || item.title) + "-" + index}
           item={item}
           context={context}
         />
@@ -147,16 +147,16 @@ function Hero({
   item,
   context,
 }: {
-  item: MovieBoxItem;
+  item: MediaItem;
   context: CatalogContext;
 }) {
-  const href = item.slug ? paramsHref(context, { detail: item.slug }) : null;
+  const href = item.detailKey ? paramsHref(context, { detail: item.detailKey }) : null;
 
   return (
     <section className="relative mb-8 overflow-hidden rounded-2xl border border-border bg-surface">
-      {item.poster_url ? (
+      {item.poster ? (
         <img
-          src={item.poster_url}
+          src={item.poster}
           alt=""
           referrerPolicy="no-referrer"
           className="absolute inset-0 size-full scale-110 object-cover opacity-35 blur-2xl"
@@ -167,10 +167,10 @@ function Hero({
 
       <div className="relative grid min-h-[330px] items-center gap-8 p-6 sm:grid-cols-[180px_1fr] sm:p-8 lg:min-h-[390px] lg:grid-cols-[220px_1fr] lg:p-10">
         <div className="mx-auto aspect-[2/3] w-[160px] overflow-hidden rounded-xl border border-white/10 bg-surface shadow-2xl sm:w-full">
-          {item.poster_url ? (
+          {item.poster ? (
             <img
-              src={item.poster_url}
-              alt={item.name}
+              src={item.poster}
+              alt={item.title}
               referrerPolicy="no-referrer"
               className="size-full object-cover"
             />
@@ -182,7 +182,7 @@ function Hero({
             Featured
           </p>
           <h1 className="text-3xl font-black tracking-tight text-fg sm:text-4xl lg:text-5xl">
-            {item.name}
+            {item.title}
           </h1>
           {titleMeta(item) ? (
             <p className="mt-3 text-sm text-muted">{titleMeta(item)}</p>
@@ -209,7 +209,7 @@ function SectionRow({
   context,
 }: {
   title: string;
-  items: MovieBoxItem[];
+  items: MediaItem[];
   context: CatalogContext;
 }) {
   if (!items.length) return null;
@@ -224,7 +224,7 @@ function SectionRow({
       <div className="hide-scrollbar flex gap-3 overflow-x-auto pb-2 sm:gap-4">
         {items.map((item, index) => (
           <div
-            key={String(item.subject_id || item.slug || item.name) + "-" + index}
+            key={String(item.id || item.detailKey || item.title) + "-" + index}
             className="w-[132px] shrink-0 sm:w-[150px] lg:w-[166px]"
           >
             <PosterCard item={item} context={context} />
@@ -308,10 +308,10 @@ export function EntertainmentHome({
   home,
   context,
 }: {
-  home: MovieBoxHomeResponse;
+  home: MediaHome;
   context: CatalogContext;
 }) {
-  const banner = home.sections.find((section) => section.section === "Banner");
+  const banner = home.sections.find((section) => section.title === "Banner");
   const hero = banner?.items[0] ?? home.sections[0]?.items[0] ?? null;
 
   return (
@@ -325,11 +325,11 @@ export function EntertainmentHome({
       {hero ? <Hero item={hero} context={context} /> : null}
 
       {home.sections
-        .filter((section) => section.section !== "Banner")
+        .filter((section) => section.title !== "Banner")
         .map((section) => (
           <SectionRow
-            key={section.section}
-            title={section.section}
+            key={section.title}
+            title={section.title}
             items={section.items}
             context={context}
           />
@@ -346,10 +346,10 @@ export function EntertainmentCatalog({
 }: {
   title: string;
   eyebrow?: string;
-  catalog: MovieBoxCategoryResponse;
+  catalog: MediaCatalogPage;
   context: CatalogContext;
 }) {
-  const totalPages = Math.max(1, Math.ceil(catalog.total / Math.max(1, catalog.per_page)));
+  const totalPages = Math.max(1, Math.ceil(catalog.total / Math.max(1, catalog.perPage)));
 
   return (
     <section>
@@ -421,7 +421,7 @@ export function EntertainmentSearchResults({
   context,
 }: {
   query: string;
-  catalog: MovieBoxCategoryResponse;
+  catalog: MediaCatalogPage;
   context: CatalogContext;
 }) {
   return (
