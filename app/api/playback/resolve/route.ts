@@ -157,7 +157,12 @@ export async function GET(request: Request) {
     const result = await provider.resolve(input);
 
     return Response.json(toBrowserResult(providerId, input, result), {
-      headers: { "cache-control": "no-store" },
+      headers: {
+        "cache-control": "private, no-store, no-cache, max-age=0, must-revalidate",
+        pragma: "no-cache",
+        expires: "0",
+        "x-pinflix-playback-revision": "moviebox-proxy-v2",
+      },
     });
   } catch (error: unknown) {
     console.error("[playback.resolve] failed", error);
