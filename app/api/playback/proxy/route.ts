@@ -137,11 +137,29 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
       );
     }
 
-    if (!source.headers || Object.keys(source.headers).length === 0) {
+    const hasProviderHeaders =
+      source.headers && Object.keys(source.headers).length > 0;
+
+    if (!hasProviderHeaders && providerId !== "moviebox") {
       return Response.redirect(source.url, 307);
     }
 
     const upstreamHeaders = safeProviderHeaders(source.headers);
+
+    if (providerId === "moviebox") {
+      if (!upstreamHeaders.has("user-agent")) {
+        upstreamHeaders.set(
+          "user-agent",
+          "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/148 Mobile Safari/537.36",
+        );
+      }
+      if (!upstreamHeaders.has("referer")) {
+        upstreamHeaders.set("referer", "https://moviebox.ph/");
+      }
+      if (!upstreamHeaders.has("accept")) {
+        upstreamHeaders.set("accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
+      }
+    }
     const range = request.headers.get("range");
     const ifRange = request.headers.get("if-range");
 
