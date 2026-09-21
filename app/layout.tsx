@@ -16,13 +16,11 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.webmanifest",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://pinflix.pincodeit.com"),
-  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: "Pinflix",
     title: "Pinflix — Watch the world live",
     description: "The simplest way to find and watch public live television from around the world.",
-    url: "/",
   },
   twitter: {
     card: "summary_large_image",
