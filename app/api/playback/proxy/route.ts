@@ -41,6 +41,55 @@ function safeProviderHeaders(
   return result;
 }
 
+function isVideoLikeContentType(value: string | null): boolean {
+  if (!value) return true;
+
+  const type = value.split(";")[0]?.trim().toLowerCase();
+  return (
+    type.startsWith("video/") ||
+    type === "application/octet-stream" ||
+    type === "binary/octet-stream"
+  );
+}
+
+function proxyResponseHeaders(upstream: Response): Headers {
+  const headers = new Headers({
+    "cache-control": "private, no-store",
+    "cross-origin-resource-policy": "same-origin",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex",
+  });
+
+  for (const name of PASSTHROUGH_RESPONSE_HEADERS) {
+    const value = upstream.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+
+  return headers;
+}
+
+function upstreamFailure(status: number): Response {
+  const clientStatus = status === 404 || status === 416 ? status : 502;
+
+  return Response.json(
+    {
+      error:
+        status === 404
+          ? "Playback media was not found"
+          : status === 416
+            ? "Requested playback range is unavailable"
+            : "Playback upstream rejected the media request",
+    },
+    {
+      status: clientStatus,
+      headers: {
+        "cache-control": "private, no-store",
+        "x-content-type-options": "nosniff",
+      },
+    },
+  );
+}
+
 async function proxy(request: Request, headOnly: boolean): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const providerId = searchParams.get("provider") ?? "";
@@ -72,7 +121,10 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
     const source = result.sources[sourceIndex];
 
     if (!source) {
-      return Response.json({ error: "Playback source not found" }, { status: 404 });
+      return Response.json(
+        { error: "Playback source not found" },
+        { status: 404 },
+      );
     }
 
     if (source.protocol !== "mp4") {
@@ -93,6 +145,7 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
     const range = request.headers.get("range");
     const ifRange = request.headers.get("if-range");
 
+    upstreamHeaders.set("accept-encoding", "identity");
     if (range) upstreamHeaders.set("range", range);
     if (ifRange) upstreamHeaders.set("if-range", ifRange);
 
@@ -104,23 +157,43 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
       signal: request.signal,
     });
 
-    const responseHeaders = new Headers({
-      "cache-control": "private, no-store",
-      "x-content-type-options": "nosniff",
-    });
+    if (!upstream.ok && upstream.status !== 206) {
+      return upstreamFailure(upstream.status);
+    }
 
-    for (const name of PASSTHROUGH_RESPONSE_HEADERS) {
-      const value = upstream.headers.get(name);
-      if (value) responseHeaders.set(name, value);
+    if (!isVideoLikeContentType(upstream.headers.get("content-type"))) {
+      console.error("[playback.proxy] rejected non-video upstream response", {
+        status: upstream.status,
+        contentType: upstream.headers.get("content-type"),
+        providerId,
+      });
+
+      return Response.json(
+        { error: "Playback upstream returned an invalid media response" },
+        {
+          status: 502,
+          headers: { "cache-control": "private, no-store" },
+        },
+      );
     }
 
     return new Response(headOnly ? null : upstream.body, {
       status: upstream.status,
-      headers: responseHeaders,
+      headers: proxyResponseHeaders(upstream),
     });
   } catch (error: unknown) {
+    if (request.signal.aborted) {
+      return new Response(null, { status: 499 });
+    }
+
     console.error("[playback.proxy] failed", error);
-    return Response.json({ error: "Unable to proxy playback" }, { status: 502 });
+    return Response.json(
+      { error: "Unable to proxy playback" },
+      {
+        status: 502,
+        headers: { "cache-control": "private, no-store" },
+      },
+    );
   }
 }
 
