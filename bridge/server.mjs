@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import http from "node:http";
 import { handleMediaRequest } from "./media.mjs";
+import { handleMovieBoxRequest } from "./moviebox.mjs";
 
 const PORT = Number(process.env.PORT || 8787);
 const PLAYER_BASE = new URL(process.env.IPTV_PLAYER_BASE || "http://172.16.14.1");
@@ -206,6 +207,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || "/", origin);
 
     if (await handleMediaRequest(req, res, url)) return;
+    if (await handleMovieBoxRequest(req, res, url)) return;
 
     if (url.pathname === "/health") {
       send(res, 200, JSON.stringify({ ok: true }), { "content-type": "application/json" });
