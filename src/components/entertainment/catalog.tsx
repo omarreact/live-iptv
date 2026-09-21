@@ -1,0 +1,435 @@
+import Link from "next/link";
+import {
+  Clapperboard,
+  Home,
+  Play,
+  Search,
+  Sparkles,
+  Tv,
+} from "lucide-react";
+import type {
+  MovieBoxCategoryResponse,
+  MovieBoxHomeResponse,
+  MovieBoxItem,
+} from "@/lib/moviebox/types";
+import { cn } from "@/lib/utils";
+
+export type EntertainmentView = "home" | "movies" | "series" | "animation";
+
+const VIEWS: ReadonlyArray<{
+  id: EntertainmentView;
+  label: string;
+  icon: typeof Home;
+}> = [
+  { id: "home", label: "Home", icon: Home },
+  { id: "movies", label: "Movies", icon: Clapperboard },
+  { id: "series", label: "TV Series", icon: Tv },
+  { id: "animation", label: "Animation", icon: Sparkles },
+];
+
+type CatalogContext = {
+  view: EntertainmentView;
+  query: string;
+  page: number;
+};
+
+function paramsHref(
+  context: CatalogContext,
+  patch: {
+    view?: EntertainmentView | null;
+    query?: string | null;
+    page?: number | null;
+    detail?: string | null;
+  },
+): string {
+  const params = new URLSearchParams();
+
+  const view = patch.view === undefined ? context.view : patch.view;
+  const query = patch.query === undefined ? context.query : patch.query;
+  const page = patch.page === undefined ? context.page : patch.page;
+
+  if (view && view !== "home") params.set("view", view);
+  if (query) params.set("q", query);
+  if (page && page > 1) params.set("page", String(page));
+  if (patch.detail) params.set("detail", patch.detail);
+
+  const value = params.toString();
+  return value ? `/entertainment?${value}` : "/entertainment";
+}
+
+function titleMeta(item: MovieBoxItem): string {
+  return [item.year, item.rating ? `★ ${item.rating}` : null]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function PosterCard({
+  item,
+  context,
+}: {
+  item: MovieBoxItem;
+  context: CatalogContext;
+}) {
+  const content = (
+    <>
+      <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition duration-200 group-hover:-translate-y-1 group-hover:border-border-strong group-hover:shadow-xl">
+        {item.poster_url ? (
+          <img
+            src={item.poster_url}
+            alt={item.name}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            className="size-full object-cover transition duration-500 group-hover:scale-[1.04]"
+          />
+        ) : (
+          <div className="flex size-full items-end bg-gradient-to-br from-white/10 to-transparent p-4">
+            <span className="text-sm font-semibold text-fg">{item.name}</span>
+          </div>
+        )}
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/5 to-transparent" />
+
+        {item.badge ? (
+          <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur">
+            {item.badge}
+          </span>
+        ) : null}
+
+        <span className="absolute bottom-3 right-3 flex size-10 translate-y-2 items-center justify-center rounded-full bg-white text-black opacity-0 shadow-xl transition group-hover:translate-y-0 group-hover:opacity-100">
+          <Play className="size-4 fill-current" />
+        </span>
+      </div>
+
+      <h3 className="mt-2 line-clamp-1 text-sm font-semibold text-fg">
+        {item.name}
+      </h3>
+      <p className="mt-0.5 min-h-4 text-xs text-muted">{titleMeta(item)}</p>
+    </>
+  );
+
+  if (!item.slug) {
+    return <div className="group min-w-0 text-left">{content}</div>;
+  }
+
+  return (
+    <Link
+      href={paramsHref(context, { detail: item.slug })}
+      scroll={false}
+      className="group min-w-0 text-left"
+    >
+      {content}
+    </Link>
+  );
+}
+
+function PosterGrid({
+  items,
+  context,
+}: {
+  items: MovieBoxItem[];
+  context: CatalogContext;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
+      {items.map((item, index) => (
+        <PosterCard
+          key={String(item.subject_id || item.slug || item.name) + "-" + index}
+          item={item}
+          context={context}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Hero({
+  item,
+  context,
+}: {
+  item: MovieBoxItem;
+  context: CatalogContext;
+}) {
+  const href = item.slug ? paramsHref(context, { detail: item.slug }) : null;
+
+  return (
+    <section className="relative mb-8 overflow-hidden rounded-2xl border border-border bg-surface">
+      {item.poster_url ? (
+        <img
+          src={item.poster_url}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 size-full scale-110 object-cover opacity-35 blur-2xl"
+        />
+      ) : null}
+
+      <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/90 to-bg/45" />
+
+      <div className="relative grid min-h-[330px] items-center gap-8 p-6 sm:grid-cols-[180px_1fr] sm:p-8 lg:min-h-[390px] lg:grid-cols-[220px_1fr] lg:p-10">
+        <div className="mx-auto aspect-[2/3] w-[160px] overflow-hidden rounded-xl border border-white/10 bg-surface shadow-2xl sm:w-full">
+          {item.poster_url ? (
+            <img
+              src={item.poster_url}
+              alt={item.name}
+              referrerPolicy="no-referrer"
+              className="size-full object-cover"
+            />
+          ) : null}
+        </div>
+
+        <div className="max-w-2xl">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.22em] text-brand">
+            Featured
+          </p>
+          <h1 className="text-3xl font-black tracking-tight text-fg sm:text-4xl lg:text-5xl">
+            {item.name}
+          </h1>
+          {titleMeta(item) ? (
+            <p className="mt-3 text-sm text-muted">{titleMeta(item)}</p>
+          ) : null}
+          {href ? (
+            <Link
+              href={href}
+              scroll={false}
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:scale-[1.02]"
+            >
+              <Play className="size-4 fill-current" />
+              View details
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SectionRow({
+  title,
+  items,
+  context,
+}: {
+  title: string;
+  items: MovieBoxItem[];
+  context: CatalogContext;
+}) {
+  if (!items.length) return null;
+
+  return (
+    <section className="mb-9">
+      <div className="mb-3 flex items-end justify-between">
+        <h2 className="text-xl font-bold tracking-tight text-fg">{title}</h2>
+        <span className="text-xs text-muted">{items.length} titles</span>
+      </div>
+
+      <div className="hide-scrollbar flex gap-3 overflow-x-auto pb-2 sm:gap-4">
+        {items.map((item, index) => (
+          <div
+            key={String(item.subject_id || item.slug || item.name) + "-" + index}
+            className="w-[132px] shrink-0 sm:w-[150px] lg:w-[166px]"
+          >
+            <PosterCard item={item} context={context} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function EntertainmentHeader({
+  context,
+}: {
+  context: CatalogContext;
+}) {
+  return (
+    <header className="sticky top-0 z-30 border-b border-border bg-bg/95 backdrop-blur-md">
+      <div className="mx-auto max-w-[1500px] px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3">
+          <Link href="/entertainment" className="flex items-center gap-2">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-brand font-black text-white">
+              P
+            </span>
+            <div className="hidden text-left sm:block">
+              <p className="text-sm font-black tracking-[0.12em]">PINFLIX</p>
+              <p className="text-[10px] text-muted">Entertainment</p>
+            </div>
+          </Link>
+
+          <form
+            action="/entertainment"
+            method="get"
+            className="ml-auto flex w-full max-w-xl items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5"
+          >
+            <Search className="size-4 shrink-0 text-muted" />
+            <input
+              type="search"
+              name="q"
+              defaultValue={context.query}
+              placeholder="Search movies, series, anime…"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-subtle"
+            />
+          </form>
+        </div>
+
+        {!context.query ? (
+          <nav className="hide-scrollbar mt-3 flex gap-1 overflow-x-auto">
+            {VIEWS.map((entry) => {
+              const Icon = entry.icon;
+              const active = context.view === entry.id;
+
+              return (
+                <Link
+                  key={entry.id}
+                  href={paramsHref(context, {
+                    view: entry.id,
+                    query: null,
+                    page: null,
+                    detail: null,
+                  })}
+                  className={cn(
+                    "flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition",
+                    active
+                      ? "bg-white text-black"
+                      : "text-muted hover:bg-surface hover:text-fg",
+                  )}
+                >
+                  <Icon className="size-4" />
+                  {entry.label}
+                </Link>
+              );
+            })}
+          </nav>
+        ) : null}
+      </div>
+    </header>
+  );
+}
+
+export function EntertainmentHome({
+  home,
+  context,
+}: {
+  home: MovieBoxHomeResponse;
+  context: CatalogContext;
+}) {
+  const banner = home.sections.find((section) => section.section === "Banner");
+  const hero = banner?.items[0] ?? home.sections[0]?.items[0] ?? null;
+
+  return (
+    <>
+      {home.status === "error" ? (
+        <p className="mb-5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {home.error ?? "Entertainment is unavailable right now."}
+        </p>
+      ) : null}
+
+      {hero ? <Hero item={hero} context={context} /> : null}
+
+      {home.sections
+        .filter((section) => section.section !== "Banner")
+        .map((section) => (
+          <SectionRow
+            key={section.section}
+            title={section.section}
+            items={section.items}
+            context={context}
+          />
+        ))}
+    </>
+  );
+}
+
+export function EntertainmentCatalog({
+  title,
+  eyebrow = "Entertainment catalog",
+  catalog,
+  context,
+}: {
+  title: string;
+  eyebrow?: string;
+  catalog: MovieBoxCategoryResponse;
+  context: CatalogContext;
+}) {
+  const totalPages = Math.max(1, Math.ceil(catalog.total / Math.max(1, catalog.per_page)));
+
+  return (
+    <section>
+      <div className="mb-6">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">
+          {eyebrow}
+        </p>
+        <h1 className="mt-1 text-3xl font-black">{title}</h1>
+        <p className="mt-1 text-sm text-muted">
+          {catalog.total
+            ? `${catalog.total.toLocaleString()} available titles`
+            : "Browse titles"}
+        </p>
+      </div>
+
+      {catalog.items.length ? (
+        <>
+          <PosterGrid items={catalog.items} context={context} />
+
+          {totalPages > 1 ? (
+            <nav
+              className="mt-10 flex items-center justify-between gap-4"
+              aria-label="Entertainment pages"
+            >
+              {context.page > 1 ? (
+                <Link
+                  href={paramsHref(context, {
+                    page: context.page - 1,
+                    detail: null,
+                  })}
+                  className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold hover:border-border-strong"
+                >
+                  Previous
+                </Link>
+              ) : (
+                <span />
+              )}
+
+              <span className="text-sm tabular-nums text-muted">
+                Page {context.page.toLocaleString()} of {totalPages.toLocaleString()}
+              </span>
+
+              {context.page < totalPages ? (
+                <Link
+                  href={paramsHref(context, {
+                    page: context.page + 1,
+                    detail: null,
+                  })}
+                  className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold hover:border-border-strong"
+                >
+                  Next
+                </Link>
+              ) : (
+                <span />
+              )}
+            </nav>
+          ) : null}
+        </>
+      ) : (
+        <p className="py-20 text-center text-muted">No titles available.</p>
+      )}
+    </section>
+  );
+}
+
+export function EntertainmentSearchResults({
+  query,
+  catalog,
+  context,
+}: {
+  query: string;
+  catalog: MovieBoxCategoryResponse;
+  context: CatalogContext;
+}) {
+  return (
+    <EntertainmentCatalog
+      title={`Results for “${query}”`}
+      eyebrow="Search"
+      catalog={catalog}
+      context={context}
+    />
+  );
+}

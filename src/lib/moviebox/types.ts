@@ -37,28 +37,22 @@ export type MovieBoxCategoryResponse = {
   items: MovieBoxItem[];
 };
 
+export type MovieBoxSeason = {
+  se: number;
+  maxEp: number;
+};
 
-export type MovieBoxDetail = {
+export type MovieBoxDetailView = {
+  subjectId: string | number | null;
+  detailPath: string | null;
   title: string;
-  description?: string | null;
-  poster_url?: string | null;
-  backdrop_url?: string | null;
-  year?: string | null;
-  rating?: number | string | null;
-  genres?: string[];
-  country?: string | null;
-  runtime?: string | null;
-  subject_id?: string | number | null;
-  slug?: string | null;
-  kind?: MovieBoxKind;
-  seasons?: Array<{
-    season: number;
-    episodes: Array<{
-      episode: number;
-      title?: string;
-      subject_id?: string | number;
-    }>;
-  }>;
+  description: string;
+  genre: string;
+  year: string | null;
+  rating: string | number | null;
+  poster: string | null;
+  trailer: string | null;
+  seasons: MovieBoxSeason[];
 };
 
 export type MovieBoxStreamSource = {
@@ -74,6 +68,9 @@ export type MovieBoxStreamSource = {
 
 export type MovieBoxCaption = {
   language?: string;
+  lang?: string;
+  lan?: string;
+  lanName?: string;
   label?: string;
   url?: string;
   file?: string;
