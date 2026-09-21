@@ -15,4 +15,6 @@ export {
   getTvSeries,
   getAnimation,
   search,
+  getDetail,
+  getStreamSources,
 } from "./service";
