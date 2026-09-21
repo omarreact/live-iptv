@@ -63,13 +63,7 @@ function titleMeta(item: MediaItem): string {
     .join(" · ");
 }
 
-function PosterCard({
-  item,
-  context,
-}: {
-  item: MediaItem;
-  context: CatalogContext;
-}) {
+function PosterCard({ item }: { item: MediaItem }) {
   const content = (
     <>
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition duration-200 group-hover:-translate-y-1 group-hover:border-border-strong group-hover:shadow-xl">
@@ -122,33 +116,20 @@ function PosterCard({
   );
 }
 
-function PosterGrid({
-  items,
-  context,
-}: {
-  items: MediaItem[];
-  context: CatalogContext;
-}) {
+function PosterGrid({ items }: { items: MediaItem[] }) {
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
       {items.map((item, index) => (
         <PosterCard
           key={String(item.id || item.detailKey || item.title) + "-" + index}
           item={item}
-          context={context}
         />
       ))}
     </div>
   );
 }
 
-function Hero({
-  item,
-  context,
-}: {
-  item: MediaItem;
-  context: CatalogContext;
-}) {
+function Hero({ item }: { item: MediaItem }) {
   const href = item.detailKey
     ? `/entertainment/${encodeURIComponent(item.detailKey)}`
     : null;
@@ -206,11 +187,9 @@ function Hero({
 function SectionRow({
   title,
   items,
-  context,
 }: {
   title: string;
   items: MediaItem[];
-  context: CatalogContext;
 }) {
   if (!items.length) return null;
 
@@ -227,7 +206,7 @@ function SectionRow({
             key={String(item.id || item.detailKey || item.title) + "-" + index}
             className="w-[132px] shrink-0 sm:w-[150px] lg:w-[166px]"
           >
-            <PosterCard item={item} context={context} />
+            <PosterCard item={item} />
           </div>
         ))}
       </div>
@@ -329,7 +308,7 @@ export function EntertainmentHome({
         </p>
       ) : null}
 
-      {hero ? <Hero item={hero} context={context} /> : null}
+      {hero ? <Hero item={hero} /> : null}
 
       {home.sections
         .filter((section) => section.title !== "Banner")
@@ -338,7 +317,6 @@ export function EntertainmentHome({
             key={section.title}
             title={section.title}
             items={section.items}
-            context={context}
           />
         ))}
     </>
@@ -374,7 +352,7 @@ export function EntertainmentCatalog({
 
       {catalog.items.length ? (
         <>
-          <PosterGrid items={catalog.items} context={context} />
+          <PosterGrid items={catalog.items} />
 
           {totalPages > 1 ? (
             <nav
