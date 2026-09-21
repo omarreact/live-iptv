@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  AlertTriangle,
-  Keyboard,
-  LoaderCircle,
-  Maximize2,
-  RotateCcw,
-} from "lucide-react";
+import { Keyboard, Maximize2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -21,110 +15,23 @@ import {
 } from "@/lib/media/protocol";
 import type { BrowserPlaybackResult } from "@/types/media";
 import {
+  loadDashJs,
+  type DashPlayer,
+} from "./dash-loader.client";
+import {
   readQualityPreference,
   writeQualityPreference,
 } from "./player-preferences";
+import {
+  PlayerStateOverlay,
+  type PlayerStatus,
+} from "./player-state-overlay";
 import {
   QualitySelector,
   type QualityOption,
 } from "./quality-selector";
 import { SubtitleSelector } from "./subtitle-selector";
-
-const DASH_JS_URL = "https://cdn.dashjs.org/v5.2.1/dash.all.min.js";
-
-type PlayerStatus = "idle" | "loading" | "ready" | "playing" | "error";
-
-type DashRepresentation = {
-  id?: string | number;
-  height?: number;
-  bandwidth?: number;
-  bitrateInKbit?: number;
-};
-
-type DashPlayer = {
-  initialize(
-    video: HTMLVideoElement,
-    source: string,
-    autoPlay?: boolean,
-  ): void;
-  reset(): void;
-  updateSettings(settings: Record<string, unknown>): void;
-  getRepresentationsByType(type: "video"): DashRepresentation[];
-  getCurrentRepresentationForType(type: "video"): DashRepresentation | null;
-  setRepresentationForTypeById(
-    type: "video",
-    id: string | number,
-    forceReplace?: boolean,
-  ): void;
-  on(event: string, listener: (event?: unknown) => void): void;
-};
-
-type DashMediaPlayerFactory = {
-  (): { create(): DashPlayer };
-  events: {
-    STREAM_INITIALIZED: string;
-    ERROR: string;
-    QUALITY_CHANGE_RENDERED: string;
-  };
-};
-
-type DashGlobal = {
-  MediaPlayer: DashMediaPlayerFactory;
-};
-
-declare global {
-  interface Window {
-    dashjs?: DashGlobal;
-  }
-}
-
-let dashLoader: Promise<DashGlobal> | null = null;
-
-function loadDashJs(): Promise<DashGlobal> {
-  if (window.dashjs) return Promise.resolve(window.dashjs);
-  if (dashLoader) return dashLoader;
-
-  dashLoader = new Promise<DashGlobal>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      `script[src="${DASH_JS_URL}"]`,
-    );
-
-    const resolveGlobal = () => {
-      if (window.dashjs) {
-        resolve(window.dashjs);
-      } else {
-        reject(new Error("dash.js loaded without exposing the player API"));
-      }
-    };
-
-    if (existing) {
-      existing.addEventListener("load", resolveGlobal, { once: true });
-      existing.addEventListener(
-        "error",
-        () => reject(new Error("Failed to load dash.js")),
-        { once: true },
-      );
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = DASH_JS_URL;
-    script.async = true;
-    script.crossOrigin = "anonymous";
-    script.addEventListener("load", resolveGlobal, { once: true });
-    script.addEventListener(
-      "error",
-      () => reject(new Error("Failed to load dash.js")),
-      { once: true },
-    );
-    document.head.appendChild(script);
-  }).catch((error) => {
-    dashLoader = null;
-    throw error;
-  });
-
-  return dashLoader;
-}
+import { usePlayerShortcuts } from "./use-player-shortcuts";
 
 function topLevelSourceOptions(
   result: BrowserPlaybackResult,
@@ -134,27 +41,15 @@ function topLevelSourceOptions(
 
   return result.sources.map((source, index) => {
     const height = heights[index] ?? undefined;
+
     return {
       value: String(index),
-      label:
-        source.quality ??
-        detectPlaybackProtocol(source).toUpperCase(),
+      label: source.quality ?? detectPlaybackProtocol(source).toUpperCase(),
       height,
       detail: detectPlaybackProtocol(source).toUpperCase(),
       isBest: Boolean(height && height === bestHeight && bestHeight > 0),
     };
   });
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    Boolean(
-      target.closest(
-        'input, textarea, select, button, a, [contenteditable="true"]',
-      ),
-    )
-  );
 }
 
 function mediaErrorMessage(video: HTMLVideoElement): string {
@@ -241,6 +136,11 @@ export function AdaptivePlayer({
     }
   }, []);
 
+  usePlayerShortcuts({
+    videoRef,
+    onToggleFullscreen: toggleFullscreen,
+  });
+
   useEffect(() => {
     if (sourceIndex >= result.sources.length) setSourceIndex(0);
   }, [result.sources.length, sourceIndex]);
@@ -286,7 +186,8 @@ export function AdaptivePlayer({
 
     const onLoadStart = () => setStatus("loading");
     const onWaiting = () => setStatus("loading");
-    const onCanPlay = () => setStatus((value) => (value === "playing" ? value : "ready"));
+    const onCanPlay = () =>
+      setStatus((value) => (value === "playing" ? value : "ready"));
     const onPlaying = () => setStatus("playing");
     const onError = () => setFailure(mediaErrorMessage(video));
 
@@ -330,6 +231,7 @@ export function AdaptivePlayer({
         const hls = new Hls({
           enableWorker: true,
           startLevel: -1,
+          capLevelToPlayerSize: true,
         });
         hlsRef.current = hls;
 
@@ -374,8 +276,7 @@ export function AdaptivePlayer({
         });
 
         hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
-          const height = hls.levels[data.level]?.height;
-          setCurrentHeight(height || null);
+          setCurrentHeight(hls.levels[data.level]?.height || null);
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -543,57 +444,6 @@ export function AdaptivePlayer({
       document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
-
-      const video = videoRef.current;
-      if (!video) return;
-
-      switch (event.key.toLowerCase()) {
-        case " ":
-          event.preventDefault();
-          if (video.paused) {
-            void video.play().catch(() => undefined);
-          } else {
-            video.pause();
-          }
-          break;
-
-        case "arrowleft":
-          event.preventDefault();
-          video.currentTime = Math.max(0, video.currentTime - 10);
-          break;
-
-        case "arrowright":
-          event.preventDefault();
-          video.currentTime = Math.min(
-            Number.isFinite(video.duration) ? video.duration : video.currentTime + 10,
-            video.currentTime + 10,
-          );
-          break;
-
-        case "arrowup":
-          event.preventDefault();
-          video.volume = Math.min(1, video.volume + 0.1);
-          break;
-
-        case "arrowdown":
-          event.preventDefault();
-          video.volume = Math.max(0, video.volume - 0.1);
-          break;
-
-        case "f":
-          event.preventDefault();
-          void toggleFullscreen();
-          break;
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleFullscreen]);
-
   function changeSource(value: string): void {
     const nextIndex = Number(value);
     const video = videoRef.current;
@@ -661,14 +511,14 @@ export function AdaptivePlayer({
     });
 
     if (value.startsWith("dash:")) {
-      const id = value.slice(5);
-      dash.setRepresentationForTypeById("video", id, false);
+      dash.setRepresentationForTypeById("video", value.slice(5), false);
       return;
     }
 
     if (value.startsWith("dash-index:")) {
       const index = Number(value.slice(11));
       const representation = dash.getRepresentationsByType("video")[index];
+
       if (representation?.id !== undefined) {
         dash.setRepresentationForTypeById("video", representation.id, false);
       }
@@ -711,36 +561,11 @@ export function AdaptivePlayer({
           ))}
         </video>
 
-        {status === "loading" && !error ? (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/25">
-            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/60 px-4 py-2 text-sm font-medium text-white/85 backdrop-blur-lg">
-              <LoaderCircle className="size-4 animate-spin" />
-              Loading video…
-            </div>
-          </div>
-        ) : null}
-
-        {status === "error" && error ? (
-          <div className="absolute inset-0 grid place-items-center bg-black/75 p-5 backdrop-blur-sm">
-            <div className="max-w-sm text-center">
-              <span className="mx-auto grid size-12 place-items-center rounded-full bg-red-500/15 text-red-300">
-                <AlertTriangle className="size-6" />
-              </span>
-              <p className="mt-3 text-base font-bold text-white">
-                Playback interrupted
-              </p>
-              <p className="mt-1 text-sm leading-6 text-white/60">{error}</p>
-              <button
-                type="button"
-                onClick={retry}
-                className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-bold text-black transition hover:bg-white/90"
-              >
-                <RotateCcw className="size-4" />
-                Retry
-              </button>
-            </div>
-          </div>
-        ) : null}
+        <PlayerStateOverlay
+          status={status}
+          error={error}
+          onRetry={retry}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-gradient-to-b from-white/[0.06] to-transparent px-3 py-3 sm:px-4">
