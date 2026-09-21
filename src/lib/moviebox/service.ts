@@ -22,7 +22,10 @@ export async function getHome(): Promise<MovieBoxHomeResponse> {
 
       if (opType === "BANNER") {
         const items: MovieBoxItem[] = (op?.banner?.items || [])
-          .filter((item: any) => item?.title && !String(item.title).includes("Communities"))
+          .filter(
+            (item: any) =>
+              item?.title && !String(item.title).includes("Communities"),
+          )
           .map((item: any) => ({
             name: item.title || item.subject?.title || "Untitled",
             poster_url:
@@ -37,7 +40,9 @@ export async function getHome(): Promise<MovieBoxHomeResponse> {
           sections.push({ section: "Banner", count: items.length, items });
         }
       } else if (
-        ["SUBJECTS_MOVIE", "SUBJECTS_TV", "SUBJECTS_ANIMATION"].includes(opType)
+        ["SUBJECTS_MOVIE", "SUBJECTS_TV", "SUBJECTS_ANIMATION"].includes(
+          opType,
+        )
       ) {
         const kind =
           opType === "SUBJECTS_MOVIE"
@@ -117,43 +122,50 @@ export async function getAnimation(page = 1, sort = "RECOMMEND") {
 }
 
 export async function search(query: string, page = 1) {
-  const data = await movieboxRequest<any>("/subject/search", {
-    method: "POST",
-    body: {
-      keyword: query,
-      q: query,
+  // Try the primary search endpoint used by the official app
+  try {
+    const data = await movieboxRequest<any>("/subject/search", {
+      method: "POST",
+      body: {
+        keyword: query,
+        q: query,
+        page,
+        pageSize: 24,
+        type: 0,
+      },
+    });
+
+    const inner = data?.data || {};
+    const rawItems = inner.items || inner.subjects || inner.list || [];
+    const items = rawItems.map((sub: any) => normalizeItem(sub));
+
+    return {
+      query,
       page,
-      pageSize: 24,
-      type: 0,
-    },
-  });
+      items,
+      total: inner.total || items.length,
+    };
+  } catch (primaryErr) {
+    // Fallback: search-suggest style
+    try {
+      const data = await movieboxRequest<any>("/subject/search-suggest", {
+        method: "POST",
+        body: { keyword: query, perPage: 24 },
+      });
 
-  const inner = data?.data || {};
-  const rawItems = inner.items || inner.subjects || inner.list || [];
-  const items = rawItems.map((sub: any) => normalizeItem(sub));
+      const inner = data?.data || {};
+      const rawItems = inner.items || inner.subjects || inner.list || [];
+      const items = rawItems.map((sub: any) => normalizeItem(sub));
 
-  return {
-    query,
-    page,
-    items,
-    total: inner.total || items.length,
-  };
-}
-
-export async function getDetail(slug: string) {
-  // The original API uses /detail/{slug}. We try the most common patterns.
-  // Many implementations resolve via subjectId. For now we return a basic shape
-  // and let the stream endpoint handle the heavy lifting when subject_id is known.
-
-  // Fallback: try to extract subject from slug if possible, otherwise return minimal
-  return {
-    title: slug
-      .split("-")
-      .slice(0, -1)
-      .join(" ")
-      .replace(/\b\w/g, (c) => c.toUpperCase()),
-    slug,
-    poster_url: null,
-    description: null,
-  };
+      return {
+        query,
+        page,
+        items,
+        total: items.length,
+      };
+    } catch {
+      console.error("[moviebox] search failed", primaryErr);
+      return { query, page, items: [], total: 0 };
+    }
+  }
 }
