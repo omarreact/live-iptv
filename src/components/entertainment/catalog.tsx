@@ -292,10 +292,8 @@ export function EntertainmentHeader({
 
 export function EntertainmentHome({
   home,
-  context,
 }: {
   home: MediaHome;
-  context: CatalogContext;
 }) {
   const banner = home.sections.find((section) => section.title === "Banner");
   const hero = banner?.items[0] ?? home.sections[0]?.items[0] ?? null;
