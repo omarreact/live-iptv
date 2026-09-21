@@ -4,16 +4,6 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "**.github.io" },
-      { protocol: "https", hostname: "**.githubusercontent.com" },
-      { protocol: "https", hostname: "i.imgur.com" },
-      { protocol: "https", hostname: "**.googleusercontent.com" },
-      { protocol: "http", hostname: "**" },
-      { protocol: "https", hostname: "**" },
-    ],
-  },
   async headers() {
     return [
       {
