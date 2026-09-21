@@ -599,14 +599,15 @@ export function EntertainmentPageClient() {
   useEffect(() => {
     if (view === "home") return;
     const config = VIEWS.find((entry) => entry.id === view);
-    if (!config?.endpoint) return;
+    const endpoint = config?.endpoint;
+    if (!endpoint) return;
     const controller = new AbortController();
 
     async function load() {
       setLoading(true);
       setPage(1);
       try {
-        const response = await fetch(config.endpoint + "?page=1", {
+        const response = await fetch(endpoint + "?page=1", {
           cache: "no-store",
           signal: controller.signal,
         });
