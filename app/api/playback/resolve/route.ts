@@ -69,6 +69,14 @@ function toBrowserResult(
     return [];
   });
 
+  if (sources.length === 0) {
+    warnings.push(
+      result.sources.length === 0
+        ? "The provider currently has no full stream for this selection."
+        : "The available full streams require a media gateway that is not browser-safe yet.",
+    );
+  }
+
   return {
     title: result.title,
     sources,

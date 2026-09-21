@@ -37,9 +37,14 @@ export function ChannelCard({
       href={"/watch/" + channel.id}
       prefetch={false}
       aria-label={available ? `Watch ${channel.shortName}` : `${channel.shortName} is currently unavailable`}
+      aria-disabled={!available}
+      tabIndex={available ? 0 : -1}
+      onClick={(event) => {
+        if (!available) event.preventDefault();
+      }}
       className={cn(
         "group tv-focus flex shrink-0 flex-col gap-2.5 rounded-xl outline-none",
-        !available && "opacity-70",
+        !available && "cursor-not-allowed opacity-70",
         featured ? "w-64 sm:w-72" : "w-40 sm:w-44",
         className,
       )}
