@@ -217,6 +217,7 @@ export function AdaptivePlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !source) return;
+    const media = video;
 
     let cancelled = false;
     const protocol = detectPlaybackProtocol(source);
@@ -270,13 +271,13 @@ export function AdaptivePlayer({
 
     async function startPlayback() {
       if (protocol === "mp4") {
-        video.src = source.url;
+        media.src = source.url;
         return;
       }
 
       if (protocol === "hls") {
-        if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          video.src = source.url;
+        if (media.canPlayType("application/vnd.apple.mpegurl")) {
+          media.src = source.url;
           setAdaptiveQualities([
             {
               value: "auto",
@@ -375,7 +376,7 @@ export function AdaptivePlayer({
         });
 
         hls.loadSource(source.url);
-        hls.attachMedia(video);
+        hls.attachMedia(media);
         return;
       }
 
@@ -469,7 +470,7 @@ export function AdaptivePlayer({
         failCurrentSource("Unable to play this DASH stream.");
       });
 
-      player.initialize(video, source.url, autoPlay || resumePlayingRef.current);
+      player.initialize(media, source.url, autoPlay || resumePlayingRef.current);
     }
 
     void startPlayback().catch((playbackError: unknown) => {
