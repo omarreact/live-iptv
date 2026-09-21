@@ -22,7 +22,7 @@ export type StreamHealthSnapshot = {
 };
 
 export type ChannelHealthSummary = {
-  state: "available" | "degraded" | "unverified";
+  state: "available" | "degraded" | "unverified" | "unavailable";
   sourceCount: number;
   healthySources: number;
   preferredQuality: string | null;
@@ -144,6 +144,13 @@ export function streamHealthScore(stream: Stream): number {
   if (stream.geoBlocked) score -= 40;
   if (stream.not247) score -= 12;
 
+  if (stream.url.startsWith("pinflix-private://")) {
+    score += 28;
+    score += qualityPoints(stream.quality);
+    score += observedAdjustment(stream.url);
+    return score;
+  }
+
   try {
     const url = new URL(stream.url);
     const rawIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname);
@@ -198,7 +205,9 @@ export function getChannelHealthSummary(channel: Channel): ChannelHealthSummary 
   const healthySources = snapshots.filter((snapshot) => snapshot.state === "healthy").length;
 
   let state: ChannelHealthSummary["state"] = "unverified";
-  if (verified.length > 0) {
+  if (channel.streams.length === 0) {
+    state = "unavailable";
+  } else if (verified.length > 0) {
     state = healthySources > 0 ? "available" : "degraded";
   }
 

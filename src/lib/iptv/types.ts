@@ -122,7 +122,9 @@ export type Channel = {
 export type ChannelPreview = Pick<
   Channel,
   "id" | "shortName" | "logo" | "groups" | "country" | "quality" | "geoBlocked"
->;
+> & {
+  available: boolean;
+};
 
 export function toChannelPreview(channel: Channel): ChannelPreview {
   return {
@@ -133,6 +135,7 @@ export function toChannelPreview(channel: Channel): ChannelPreview {
     country: channel.country,
     quality: channel.quality,
     geoBlocked: channel.geoBlocked,
+    available: channel.streams.length > 0 && Boolean(channel.url),
   };
 }
 

@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { ChannelPreview } from "@/lib/iptv/types";
@@ -22,15 +21,26 @@ export function ChannelCard({
   featured?: boolean;
   className?: string;
 }) {
-  const [broken, setBroken] = useState(false);
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
+  const [loadedLogo, setLoadedLogo] = useState<string | null>(null);
+  const broken = Boolean(channel.logo) && failedLogo === channel.logo;
+  const loaded = Boolean(channel.logo) && loadedLogo === channel.logo;
   const showLogo = Boolean(channel.logo) && !broken;
+  const available = channel.available !== false;
 
   return (
     <Link
       href={"/watch/" + channel.id}
-      aria-label={`Watch ${channel.shortName}`}
+      prefetch={false}
+      aria-label={available ? `Watch ${channel.shortName}` : `${channel.shortName} is currently unavailable`}
+      aria-disabled={!available}
+      tabIndex={available ? 0 : -1}
+      onClick={(event) => {
+        if (!available) event.preventDefault();
+      }}
       className={cn(
         "group tv-focus flex shrink-0 flex-col gap-2.5 rounded-xl outline-none",
+        !available && "cursor-not-allowed opacity-70",
         featured ? "w-64 sm:w-72" : "w-40 sm:w-44",
         className,
       )}
@@ -41,25 +51,36 @@ export function ChannelCard({
           "transition-[border-color,background-color,transform] duration-150 ease-out",
           "group-hover:-translate-y-px group-hover:border-border-strong group-hover:bg-elevated",
           "group-focus-visible:border-brand",
+          showLogo && !loaded && "pinflix-shimmer",
         )}
       >
         {showLogo ? (
-          <Image
+          <img
             src={channel.logo}
             alt=""
-            fill
-            sizes={featured ? "288px" : "176px"}
-            unoptimized
             loading="lazy"
+            decoding="async"
             referrerPolicy="no-referrer"
-            onError={() => setBroken(true)}
-            className="object-contain p-5"
+            onLoad={() => setLoadedLogo(channel.logo)}
+            onError={() => {
+              setFailedLogo(channel.logo);
+              setLoadedLogo(channel.logo);
+            }}
+            className={cn(
+              "absolute inset-0 size-full object-contain p-5 transition-[opacity,transform] duration-300 ease-out",
+              loaded ? "pinflix-artwork-ready" : "pinflix-artwork-loading",
+            )}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-2xl font-semibold text-muted">
             {monogram(channel.shortName)}
           </div>
         )}
+        {!available ? (
+          <span className="absolute bottom-2 right-2 rounded-md border border-border bg-bg/90 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+            Unavailable
+          </span>
+        ) : null}
       </div>
 
       <div className="min-w-0 px-0.5">

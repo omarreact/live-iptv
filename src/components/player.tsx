@@ -21,9 +21,21 @@ import { proxiedStreamUrl, streamKind } from "@/lib/iptv/stream";
 import { useLibrary } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { ChannelCard } from "./channel-card";
+import { StreamLoader } from "./loading";
 import { Button } from "./ui/button";
 
 type Destroyable = { destroy: () => void };
+
+type MobileVideoElement = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+  webkitExitFullscreen?: () => void;
+  webkitDisplayingFullscreen?: boolean;
+};
+
+type LockableOrientation = ScreenOrientation & {
+  lock?: (orientation: "landscape") => Promise<void>;
+  unlock?: () => void;
+};
 
 type EpgProgram = { title: string; start: string; end: string };
 type EpgPayload = {
@@ -53,10 +65,17 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const [streamIndex, setStreamIndex] = useState(0);
   const [transport, setTransport] = useState<"proxy" | "direct">("proxy");
   const [epg, setEpg] = useState<EpgPayload | null>(null);
+  const [needsGesture, setNeedsGesture] = useState(false);
+  const [nowMs, setNowMs] = useState(0);
 
   useEffect(() => {
     addRecent(channelPreview);
   }, [channelPreview, addRecent]);
+
+  useEffect(() => {
+    setStreamIndex(0);
+    setTransport("proxy");
+  }, [channel.id]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -69,6 +88,13 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       .catch(() => {});
     return () => controller.abort();
   }, [channel.id]);
+
+  useEffect(() => {
+    const updateClock = () => setNowMs(Date.now());
+    updateClock();
+    const timer = window.setInterval(updateClock, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const revealChrome = useCallback(() => {
     setChromeVisible(true);
@@ -83,9 +109,41 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     if (!el) return;
     const video: HTMLVideoElement = el;
     let cancelled = false;
+    let hasStarted = false;
+    let startupTimer: number | null = null;
+    let stallTimer: number | null = null;
+    let progressTimer: number | null = null;
+    let lastProgressAt = Date.now();
+    let lastCurrentTime = -1;
+
+    const clearStartupTimer = () => {
+      if (startupTimer !== null) window.clearTimeout(startupTimer);
+      startupTimer = null;
+    };
+    const clearStallTimer = () => {
+      if (stallTimer !== null) window.clearTimeout(stallTimer);
+      stallTimer = null;
+    };
+    const clearProgressTimer = () => {
+      if (progressTimer !== null) window.clearInterval(progressTimer);
+      progressTimer = null;
+    };
+    const clearWatchdogs = () => {
+      clearStartupTimer();
+      clearStallTimer();
+      clearProgressTimer();
+    };
+
     setError(null);
     setStarted(false);
     setPlaying(false);
+    setNeedsGesture(false);
+
+    if (!(channel.streams?.length ?? 0) && !channel.url) {
+      setError("No public stream is currently available for this channel.");
+      return;
+    }
+
     const activeStream = channel.streams?.[streamIndex] ??
       channel.streams?.[0] ?? {
         id: `${channel.id}:legacy`,
@@ -128,19 +186,13 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
 
     function fail(message?: string, status?: number) {
       if (cancelled) return;
+      hasStarted = false;
+      clearWatchdogs();
 
-      // A 4xx from the upstream itself usually means this source is stale.
-      // Prefer the next catalog source when one exists.
-      if (transport === "proxy" && status && status >= 400 && status < 500 && hasNextStream) {
-        setTransport("proxy");
-        setStreamIndex((n) => n + 1);
-        return;
-      }
-
-      // Direct browser fallback is safe only for clean HTTPS hostnames.
-      // Never expose HTTP/raw-IP streams to an HTTPS page, and don't try
-      // direct playback when the catalog requires headers the browser cannot set.
-      if (transport === "proxy" && directEligible) {
+      // A timeout or browser-level proxy failure may still be reachable from
+      // the viewer's network. Try that same clean HTTPS source directly before
+      // moving on, but do not retry explicit upstream HTTP failures directly.
+      if (transport === "proxy" && directEligible && !status) {
         setTransport("direct");
         return;
       }
@@ -155,21 +207,96 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       setError(message ?? "This channel is temporarily unavailable.");
     }
 
+    const armStartupWatchdog = () => {
+      clearStartupTimer();
+      startupTimer = window.setTimeout(() => {
+        fail("This source did not start in time.");
+      }, 16_000);
+    };
+
+    const armStallWatchdog = () => {
+      if (!hasStarted) return;
+      clearStallTimer();
+      stallTimer = window.setTimeout(() => {
+        fail("The live signal stopped responding.");
+      }, 12_000);
+    };
+
+    const handlePlayRejection = (playError: unknown) => {
+      if (cancelled) return;
+      if (playError instanceof Error && playError.name === "NotAllowedError") {
+        clearStartupTimer();
+        clearStallTimer();
+        setNeedsGesture(true);
+        setStarted(true);
+        setError(null);
+        return;
+      }
+      fail("The browser could not start this live source.");
+    };
+
+    const attemptPlay = async () => {
+      try {
+        await video.play();
+      } catch (playError: unknown) {
+        handlePlayRejection(playError);
+      }
+    };
+
     const onPlaying = () => {
+      hasStarted = true;
+      clearStartupTimer();
+      clearStallTimer();
       setPlaying(true);
       setStarted(true);
+      setNeedsGesture(false);
       setError(null);
+      lastCurrentTime = video.currentTime;
+      lastProgressAt = Date.now();
+
+      if (progressTimer === null) {
+        progressTimer = window.setInterval(() => {
+          if (cancelled || video.paused || video.ended) return;
+          const current = video.currentTime;
+          if (Number.isFinite(current) && current > lastCurrentTime + 0.05) {
+            lastCurrentTime = current;
+            lastProgressAt = Date.now();
+            return;
+          }
+          if (Date.now() - lastProgressAt >= 15_000) {
+            fail("The live signal stalled.");
+          }
+        }, 3_000);
+      }
     };
-    const onPause = () => setPlaying(false);
+    const onPause = () => {
+      setPlaying(false);
+      clearStallTimer();
+    };
+    const onWaiting = () => {
+      if (!video.paused) armStallWatchdog();
+    };
+    const onCanPlay = () => clearStallTimer();
+    const onTimeUpdate = () => {
+      const current = video.currentTime;
+      if (Number.isFinite(current) && current > lastCurrentTime + 0.05) {
+        lastCurrentTime = current;
+        lastProgressAt = Date.now();
+      }
+    };
     const onError = () => fail();
     video.addEventListener("playing", onPlaying);
     video.addEventListener("pause", onPause);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("stalled", onWaiting);
+    video.addEventListener("canplay", onCanPlay);
+    video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("error", onError);
     async function attachHls(onFatal?: () => void) {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
       if (native) {
         video.src = src;
-        await video.play().catch(() => {});
+        await attemptPlay();
         return;
       }
       const { default: Hls } = await import("hls.js");
@@ -180,7 +307,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           return;
         }
         video.src = src;
-        await video.play().catch(() => fail("Live playback is not supported in this browser."));
+        await attemptPlay();
         return;
       }
       const hls = new Hls({
@@ -195,7 +322,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
+        void attemptPlay();
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         const d = data as { fatal?: boolean; response?: { code?: number } };
@@ -213,7 +340,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       if (cancelled) return;
       if (!mpegts.isSupported()) {
         video.src = src;
-        await video.play().catch(() => fail("Live playback is not supported in this browser."));
+        await attemptPlay();
         return;
       }
       const player = mpegts.createPlayer(
@@ -229,14 +356,16 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       engineRef.current = player;
       player.attachMediaElement(video);
       player.load();
-      void Promise.resolve(player.play()).catch(() => {});
+      void Promise.resolve(player.play()).catch((playError: unknown) => {
+        handlePlayRejection(playError);
+      });
       player.on(mpegts.Events.ERROR, () => fail());
     }
     async function attach() {
       try {
         if (kind === "mp4") {
           video.src = src;
-          await video.play().catch(() => {});
+          await attemptPlay();
           return;
         }
         if (kind === "hls") {
@@ -250,12 +379,18 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
         fail();
       }
     }
+    armStartupWatchdog();
     void attach();
     revealChrome();
     return () => {
       cancelled = true;
+      clearWatchdogs();
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("stalled", onWaiting);
+      video.removeEventListener("canplay", onCanPlay);
+      video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("error", onError);
       try {
         engineRef.current?.destroy();
@@ -268,16 +403,75 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     };
   }, [channel, revealChrome, retry, streamIndex, transport]);
 
-  useEffect(() => {
-    const onFs = () => setFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
+  const isMobileLike = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
   }, []);
+
+  const lockLandscape = useCallback(async () => {
+    if (!isMobileLike()) return;
+    const orientation = screen.orientation as LockableOrientation | undefined;
+    if (!orientation?.lock) return;
+    try {
+      await orientation.lock("landscape");
+    } catch {
+      // Some browsers expose Screen Orientation but still disallow locking.
+    }
+  }, [isMobileLike]);
+
+  const unlockOrientation = useCallback(() => {
+    const orientation = screen.orientation as LockableOrientation | undefined;
+    try {
+      orientation?.unlock?.();
+    } catch {
+      // Ignore browsers that do not permit explicit unlocks.
+    }
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current as MobileVideoElement | null;
+
+    const onFs = () => {
+      const active = Boolean(document.fullscreenElement);
+      setFullscreen(active);
+      if (active) void lockLandscape();
+      else unlockOrientation();
+    };
+    const onWebkitBegin = () => {
+      setFullscreen(true);
+      void lockLandscape();
+    };
+    const onWebkitEnd = () => {
+      setFullscreen(false);
+      unlockOrientation();
+    };
+
+    document.addEventListener("fullscreenchange", onFs);
+    video?.addEventListener("webkitbeginfullscreen", onWebkitBegin as EventListener);
+    video?.addEventListener("webkitendfullscreen", onWebkitEnd as EventListener);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      video?.removeEventListener("webkitbeginfullscreen", onWebkitBegin as EventListener);
+      video?.removeEventListener("webkitendfullscreen", onWebkitEnd as EventListener);
+      unlockOrientation();
+    };
+  }, [lockLandscape, unlockOrientation]);
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) video.play().catch(() => {});
-    else video.pause();
+    if (video.paused) {
+      video.play().then(
+        () => setNeedsGesture(false),
+        (playError: unknown) => {
+          if (!(playError instanceof Error && playError.name === "NotAllowedError")) {
+            setError("The browser could not start this live source.");
+          }
+        },
+      );
+    } else {
+      video.pause();
+    }
     revealChrome();
   }, [revealChrome]);
   const toggleMute = useCallback(() => {
@@ -289,10 +483,38 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   }, [revealChrome]);
   const toggleFs = useCallback(async () => {
     const el = wrapRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else await el.requestFullscreen().catch(() => {});
-  }, []);
+    const video = videoRef.current as MobileVideoElement | null;
+    if (!el || !video) return;
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => {});
+      unlockOrientation();
+      return;
+    }
+
+    if (video.webkitDisplayingFullscreen) {
+      video.webkitExitFullscreen?.();
+      unlockOrientation();
+      return;
+    }
+
+    try {
+      await el.requestFullscreen();
+      await lockLandscape();
+      return;
+    } catch {
+      // iPhone Safari may only offer native video fullscreen.
+    }
+
+    if (video.webkitEnterFullscreen) {
+      try {
+        video.webkitEnterFullscreen();
+        await lockLandscape();
+      } catch {
+        // Keep playback inline when native fullscreen is unavailable.
+      }
+    }
+  }, [lockLandscape, unlockOrientation]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -325,7 +547,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
         0,
         Math.min(
           100,
-          ((Date.now() - new Date(epg.now.start).getTime()) /
+          ((nowMs - new Date(epg.now.start).getTime()) /
             Math.max(1, new Date(epg.now.end).getTime() - new Date(epg.now.start).getTime())) *
             100,
         ),
@@ -348,15 +570,30 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           onClick={togglePlay}
         />
         {!started && !error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <div className="size-10 animate-spin rounded-full border-2 border-border-strong border-t-brand" />
-            <p className="text-xs font-medium text-muted">
-              {transport === "direct"
-                ? "Trying another source…"
-                : streamIndex > 0
-                  ? "Trying another source…"
-                  : "Connecting…"}
-            </p>
+          <StreamLoader
+            label={
+              transport === "direct" || streamIndex > 0
+                ? "Switching to a healthier source"
+                : "Connecting to live signal"
+            }
+          />
+        ) : null}
+        {needsGesture && !error ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/35 p-6">
+            <Button
+              size="lg"
+              onClick={() => {
+                const video = videoRef.current;
+                if (!video) return;
+                void video.play().then(
+                  () => setNeedsGesture(false),
+                  () => setError("Tap-to-play was blocked by the browser."),
+                );
+              }}
+            >
+              <Play className="size-5 fill-current" />
+              Tap to play
+            </Button>
           </div>
         ) : null}
         {error ? (

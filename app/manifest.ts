@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Pinflix — Watch the world live",
     short_name: "Pinflix",
-    description: "Watch public live television from around the world.",
+    description: "Watch live TV and browse movies, TV series, and animation on Pinflix.",
     start_url: "/",
     display: "standalone",
     background_color: "#0A0A0B",

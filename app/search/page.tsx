@@ -1,95 +1,49 @@
-"use client";
-
 import { Search as SearchIcon } from "lucide-react";
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { headers } from "next/headers";
 import { ChannelGrid } from "@/components/channel-card";
-import { Input } from "@/components/ui/input";
+import { searchPrivateChannels } from "@/lib/iptv/private-channels";
+import { searchChannels } from "@/lib/iptv/provider/iptv-org";
+import { trustedViewerCountry } from "@/lib/viewer-location";
 import type { ChannelPreview } from "@/lib/iptv/types";
 
-export default function SearchPage() {
-  return (
-    <Suspense fallback={<SearchLoading />}>
-      <SearchPageInner />
-    </Suspense>
-  );
+export const metadata = {
+  title: "Search",
+  description: "Search live TV channels and countries on Pinflix.",
+};
+
+type SearchParams = Promise<{ q?: string | string[] }>;
+
+function first(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
-function SearchLoading() {
-  return (
-    <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Search</h1>
-      <div className="mt-5 h-12 max-w-2xl rounded-xl bg-surface" />
-    </main>
-  );
-}
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+  const query = first(params.q).trim().slice(0, 120);
 
-function SearchPageInner() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const initial = searchParams.get("q") ?? "";
-  const [q, setQ] = useState(initial);
-  const [results, setResults] = useState<ChannelPreview[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const seq = useRef(0);
+  let results: ChannelPreview[] = [];
+  let failed = false;
 
-  useEffect(() => {
-    const syncFromHistory = () => {
-      setQ(new URLSearchParams(window.location.search).get("q") ?? "");
-    };
-    window.addEventListener("popstate", syncFromHistory);
-    return () => window.removeEventListener("popstate", syncFromHistory);
-  }, []);
+  if (query.length >= 2) {
+    try {
+      const publicResults = await searchChannels(query, 60);
+      const country = trustedViewerCountry(await headers());
+      const privateResults = country === "BD" ? searchPrivateChannels(query, 60) : [];
 
-  useEffect(() => {
-    const next = q.trim();
-    const requestId = ++seq.current;
-    let controller: AbortController | undefined;
-    const handle = window.setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next) params.set("q", next);
-      else params.delete("q");
-      const nextUrl = params.size > 0 ? "/search?" + params.toString() : "/search";
-      if ((searchParams.get("q") ?? "") !== next) {
-        router.replace(nextUrl, { scroll: false });
+      const unique = new Map<string, ChannelPreview>();
+      for (const channel of [...privateResults, ...publicResults]) {
+        if (!unique.has(channel.id)) unique.set(channel.id, channel);
       }
-
-      if (next.length < 2) {
-        setResults([]);
-        setLoading(false);
-        setError(null);
-        return;
-      }
-
-      controller = new AbortController();
-      setLoading(true);
-      setError(null);
-      fetch("/api/search?q=" + encodeURIComponent(next), { signal: controller.signal })
-        .then((res) => {
-          if (!res.ok) throw new Error("Search failed with status " + res.status);
-          return res.json() as Promise<ChannelPreview[]>;
-        })
-        .then((rows) => {
-          if (seq.current === requestId) setResults(rows);
-        })
-        .catch((requestError: unknown) => {
-          if (requestError instanceof DOMException && requestError.name === "AbortError") return;
-          if (seq.current === requestId) {
-            setResults([]);
-            setError("Search is temporarily unavailable.");
-          }
-        })
-        .finally(() => {
-          if (seq.current === requestId) setLoading(false);
-        });
-    }, 220);
-
-    return () => {
-      window.clearTimeout(handle);
-      controller?.abort();
-    };
-  }, [q, router, searchParams]);
+      results = [...unique.values()].slice(0, 60);
+    } catch (error: unknown) {
+      console.error("Pinflix search failed", error);
+      failed = true;
+    }
+  }
 
   return (
     <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
@@ -98,27 +52,30 @@ function SearchPageInner() {
         <p className="mt-2 text-muted">Find channels by name, country, or category.</p>
       </header>
 
-      <div className="relative mt-5 max-w-xl">
+      <form action="/search" method="get" className="relative mt-5 max-w-xl">
         <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+        <input
+          type="search"
+          name="q"
+          defaultValue={query}
           placeholder="Search channels, countries…"
-          className="h-12 rounded-xl pl-10 pr-4"
+          className="h-12 w-full rounded-xl border border-border bg-surface pl-10 pr-4 text-sm text-fg outline-none transition-colors placeholder:text-subtle hover:border-border-strong focus:border-brand focus:ring-2 focus:ring-brand/15"
           autoFocus
           aria-label="Search channels and countries"
         />
-      </div>
+      </form>
 
       <section className="mt-8">
-        {error ? (
-          <p className="text-sm text-brand" role="alert">{error}</p>
-        ) : loading ? (
-          <p className="text-sm text-muted">Searching…</p>
-        ) : q.trim().length < 2 ? (
-          <p className="text-sm text-subtle">Type at least two letters.</p>
+        {failed ? (
+          <p className="text-sm text-brand" role="alert">
+            Search is temporarily unavailable.
+          </p>
+        ) : query.length < 2 ? (
+          <p className="text-sm text-subtle">Type at least two letters and press Enter.</p>
         ) : results.length === 0 ? (
-          <p className="text-sm text-muted">No channels found. Try a country or different spelling.</p>
+          <p className="text-sm text-muted">
+            No channels found. Try a country or different spelling.
+          </p>
         ) : (
           <>
             <p className="mb-4 text-sm text-muted">

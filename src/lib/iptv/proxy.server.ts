@@ -6,6 +6,9 @@ const UA =
 const MAX_UA = 400;
 const MAX_REDIRECTS = 6;
 const MAX_URL_LENGTH = 4_096;
+const ALLOWED_HOSTS_TTL_MS = 60 * 60_000;
+
+let allowedHostsCache: { expiresAt: number; hosts: Set<string> } | null = null;
 
 function isPrivateHostname(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
@@ -60,6 +63,10 @@ export function assertSafeUrl(raw: string): URL {
 }
 
 async function getAllowedHosts(): Promise<Set<string>> {
+  if (allowedHostsCache && allowedHostsCache.expiresAt > Date.now()) {
+    return allowedHostsCache.hosts;
+  }
+
   const catalog = await getIptvCatalog();
   const hosts = new Set<string>();
   for (const channel of catalog.channels) {
@@ -72,6 +79,11 @@ async function getAllowedHosts(): Promise<Set<string>> {
       }
     }
   }
+
+  allowedHostsCache = {
+    expiresAt: Date.now() + ALLOWED_HOSTS_TTL_MS,
+    hosts,
+  };
   return hosts;
 }
 
@@ -106,26 +118,36 @@ function proxyUrl(origin: string, target: string, extras: ProxyExtras): string {
   return `${origin}/api/stream?${p.toString()}`;
 }
 
-function rewriteM3u8(text: string, base: string, origin: string, extras: ProxyExtras): string {
+function rewriteM3u8(
+  text: string,
+  base: string,
+  origin: string,
+  extras: ProxyExtras,
+  allowedHosts: Set<string>,
+): string {
+  const rewriteChild = (raw: string): string => {
+    try {
+      const child = assertSafeUrl(new URL(raw, base).href);
+      return allowedHosts.has(child.hostname.toLowerCase())
+        ? proxyUrl(origin, child.href, extras)
+        : child.href;
+    } catch {
+      return raw;
+    }
+  };
+
   return text
     .split(/\r?\n/)
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return line;
       if (trimmed.startsWith("#")) {
-        return line.replace(/URI="([^"]+)"/gi, (_, uri: string) => {
-          try {
-            return `URI="${proxyUrl(origin, new URL(uri, base).href, extras)}"`;
-          } catch {
-            return `URI="${uri}"`;
-          }
-        });
+        return line.replace(
+          /URI="([^"]+)"/gi,
+          (_, uri: string) => `URI="${rewriteChild(uri)}"`,
+        );
       }
-      try {
-        return proxyUrl(origin, new URL(trimmed, base).href, extras);
-      } catch {
-        return line;
-      }
+      return rewriteChild(trimmed);
     })
     .join("\n");
 }
@@ -146,10 +168,13 @@ function passthroughHeaders(
     upstream.headers.get("content-type") || fallbackType || "application/octet-stream",
   );
   out.set("cache-control", "no-store");
-  out.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, X-Pinflix-Upstream-Status, X-Pinflix-Upstream-Host");
+  out.set(
+    "access-control-expose-headers",
+    "Content-Length, Content-Range, Accept-Ranges, X-Pinflix-Upstream-Status",
+  );
   out.set("x-accel-buffering", "no");
   out.set("x-pinflix-upstream-status", String(upstream.status));
-  if (finalUrl) out.set("x-pinflix-upstream-host", finalUrl.hostname);
+  void finalUrl;
   for (const name of ["content-length", "content-range", "accept-ranges"]) {
     const value = upstream.headers.get(name);
     if (value) out.set(name, value);
@@ -233,7 +258,6 @@ export async function proxyStream(request: Request): Promise<Response> {
       status: 502,
       headers: {
         "cache-control": "no-store",
-        "x-pinflix-upstream-host": target.hostname,
       },
     });
   }
@@ -263,7 +287,14 @@ export async function proxyStream(request: Request): Promise<Response> {
   if (treatAsPlaylist) {
     const text = await upstream.text();
     // Relative HLS URLs must resolve from the final URL after redirects.
-    const rewritten = rewriteM3u8(text, finalUrl.href, origin, extras);
+    const allowedHosts = await getAllowedHosts();
+    const rewritten = rewriteM3u8(
+      text,
+      finalUrl.href,
+      origin,
+      extras,
+      allowedHosts,
+    );
     return new Response(rewritten, {
       status: 200,
       headers: passthroughHeaders(upstream, "application/vnd.apple.mpegurl", finalUrl),

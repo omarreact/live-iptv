@@ -30,6 +30,43 @@ const REVALIDATE = 3600;
 const FETCH_TIMEOUT_MS = 20_000;
 export const CHANNELS_PER_PAGE = 120;
 
+export const PINFLIX_TARGET_TOTAL = 142;
+export const PINFLIX_BANGLADESH_TOTAL = 42;
+export const PINFLIX_FOREIGN_TOTAL = 100;
+
+const BANGLADESH_CHANNEL_IDS = [
+  "BTVNational.bd","BTVWorld.bd","BTVNews.bd","SangsadTV.bd","ChannelI.bd","ATNBangla.bd",
+  "NTV.bd","RTV.bd","BanglaVision.bd","EkusheyTV.bd","BoishakhiTV.bd","MaasrangaTV.bd",
+  "GaziTV.bd","MyTV.bd","DeeptoTV.bd","DeshTV.bd","MohonaTV.bd","SATV.bd","NagorikTV.bd",
+  "AsianTV.bd","AnandaTV.bd","NexusTV.bd","GreenTV.bd","RupashiBanglaTV.bd","MovieBangla.bd",
+  "DurontoTV.bd","TSports.bd","ATNNews.bd","Channel24.bd","DBCNews.bd","EkattorTV.bd",
+  "IndependentTV.bd","JamunaTV.bd","News24.bd","SomoyNewsTV.bd","EkhonTV.bd",
+  "News21BanglaTV.bd","RajdhaniTV.bd","ChannelS.bd","MadaniChannelBangla.bd","GaanBangla.bd",
+  "ATNMusic.bd",
+] as const;
+
+const INDIA_PREFERRED_IDS = [
+  "WION.in","AajTak.in","TimesNowNavbharat.in","DDIndia.in","DDNational.in","DDSports.in",
+  "ABPNews.in","ZeeNews.in","RepublicTV.in","News24.in","ShemarooTV.in","ShemarooUmang.in",
+  "DangalTV.in","Dangal2.in","Goldmines.in","GoldminesMovies.in","GoldminesBollywood.in",
+  "B4UMovies.in","B4UMusic.in","9XM.in","Aastha.in","HindiKhabar.in","BharatSamachar.in",
+  "B4UKadak.in","EpicMusic.in",
+] as const;
+
+const INTERNATIONAL_PREFERRED_IDS = [
+  "BBCNews.uk","CNBCUK.uk","GBNews.uk","AlJazeera.qa","DW.de","EuronewsEnglish.fr",
+  "France24.fr","AfricanewsEnglish.fr","BFMBusiness.fr","BFMTV.fr","CNews.fr","RTDE.de",
+] as const;
+
+const FACTUAL_PREFERRED_IDS = [
+  "TerraMaterWILD.de","AdventureEarth.de","ARDalpha.de","AutenticHistory.de","AutenticTravel.de",
+  "PlutoTVAnimals.de","PlutoTVHistory.de","PlutoTVScience.de","CuriosityNOW.de","N24Doku.de",
+  "TV5MondeStyle.fr","PersianaTravel.fr",
+] as const;
+
+const INTERNATIONAL_CATEGORIES = new Set(["news","business","public"]);
+const FACTUAL_CATEGORIES = new Set(["documentary","science","weather","lifestyle","travel","education"]);
+
 let catalogCache: { expiresAt: number; value: IptvCatalog } | null = null;
 let catalogInflight: Promise<IptvCatalog> | null = null;
 
@@ -37,7 +74,7 @@ async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}/${path}`, {
     headers: { accept: "application/json" },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    cache: "no-store",
+    next: { revalidate: REVALIDATE },
   });
   if (!res.ok) {
     throw new Error(`iptv-org ${path} failed: ${res.status} ${res.statusText}`);
@@ -54,6 +91,140 @@ export type IptvCatalog = {
   categories: IptvOrgCategory[];
   total: number;
 };
+
+
+function appendUnique(target: Channel[], candidates: Channel[], seen: Set<string>, targetLength: number) {
+  for (const channel of candidates) {
+    if (target.length >= targetLength) break;
+    if (seen.has(channel.id)) continue;
+    seen.add(channel.id);
+    target.push(channel);
+  }
+}
+
+function appendPreferredIds(
+  target: Channel[],
+  ids: readonly string[],
+  byId: Map<string, Channel>,
+  seen: Set<string>,
+  targetLength: number,
+) {
+  appendUnique(
+    target,
+    ids.map((id) => byId.get(id)).filter((item): item is Channel => Boolean(item)),
+    seen,
+    targetLength,
+  );
+}
+
+function sortCuratedChannels(channels: Channel[], sort: SortMode): Channel[] {
+  const sorted = sortChannels(channels, sort);
+  if (sort !== "default") return sorted;
+  return sorted.sort((a, b) => Number(b.streams.length > 0) - Number(a.streams.length > 0));
+}
+
+function curateChannels(
+  playableChannels: Channel[],
+  rawChannels: IptvOrgChannel[],
+  logoByChannel: Map<string, string>,
+  guideByChannel: Map<string, GuideSource>,
+): Channel[] {
+  const playableById = new Map(playableChannels.map((channel) => [channel.id, channel]));
+  const rawById = new Map(rawChannels.map((channel) => [channel.id, channel]));
+
+  const makeCatalogChannel = (id: string): Channel | null => {
+    const playable = playableById.get(id);
+    if (playable) return playable;
+    const raw = rawById.get(id);
+    if (!raw || raw.is_nsfw) return null;
+    const appChannel: AppChannel = { ...raw, streams: [] };
+    return toUiChannel(appChannel, logoByChannel.get(id) ?? raw.logo ?? "", guideByChannel.get(id) ?? null);
+  };
+
+  const bangladesh: Channel[] = [];
+  const bdSeen = new Set<string>();
+  for (const id of BANGLADESH_CHANNEL_IDS) {
+    const channel = makeCatalogChannel(id);
+    if (!channel || bdSeen.has(channel.id)) continue;
+    bdSeen.add(channel.id);
+    bangladesh.push(channel);
+  }
+
+  if (bangladesh.length < PINFLIX_BANGLADESH_TOTAL) {
+    const fallback = rawChannels
+      .filter((channel) => channel.country?.toUpperCase() === "BD" && !channel.is_nsfw)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    for (const raw of fallback) {
+      if (bangladesh.length >= PINFLIX_BANGLADESH_TOTAL) break;
+      const channel = makeCatalogChannel(raw.id);
+      if (!channel || bdSeen.has(channel.id)) continue;
+      bdSeen.add(channel.id);
+      bangladesh.push(channel);
+    }
+  }
+
+  const foreign: Channel[] = [];
+  const foreignSeen = new Set<string>();
+  const allowedForeignCountries = new Set(["IN","PK","NP","LK","MV","UK","QA","DE","FR"]);
+  const eligibleForeign = playableChannels.filter(
+    (channel) =>
+      Boolean(channel.country) &&
+      allowedForeignCountries.has(channel.country ?? "") &&
+      channel.streams.length > 0 &&
+      !channel.geoBlocked,
+  );
+  const foreignById = new Map(eligibleForeign.map((channel) => [channel.id, channel]));
+  const languageMatches = (channel: Channel, languages: string[]) =>
+    rawById.get(channel.id)?.languages?.some((language) => languages.includes(language)) ?? false;
+  const countryPool = (code: string) =>
+    sortChannels(eligibleForeign.filter((channel) => channel.country === code), "default");
+
+  const india = countryPool("IN");
+  appendPreferredIds(foreign, INDIA_PREFERRED_IDS, foreignById, foreignSeen, 35);
+  appendUnique(foreign, india.filter((channel) => languageMatches(channel, ["ben"])), foreignSeen, 35);
+  appendUnique(foreign, india.filter((channel) => languageMatches(channel, ["hin","eng"])), foreignSeen, 35);
+  appendUnique(foreign, india, foreignSeen, 35);
+
+  for (const [code, quota] of [["PK",10],["NP",5],["LK",5],["MV",5]] as const) {
+    appendUnique(foreign, countryPool(code), foreignSeen, foreign.length + quota);
+  }
+  appendUnique(
+    foreign,
+    sortChannels(eligibleForeign.filter((channel) => ["PK","NP","LK","MV"].includes(channel.country ?? "")), "default"),
+    foreignSeen,
+    60,
+  );
+
+  const international = sortChannels(
+    eligibleForeign.filter(
+      (channel) =>
+        ["UK","QA","DE","FR"].includes(channel.country ?? "") &&
+        channel.groups.some((group) => INTERNATIONAL_CATEGORIES.has(group)),
+    ),
+    "default",
+  );
+  appendPreferredIds(foreign, INTERNATIONAL_PREFERRED_IDS, foreignById, foreignSeen, 90);
+  appendUnique(foreign, international.filter((channel) => languageMatches(channel, ["eng"])), foreignSeen, 90);
+  appendUnique(foreign, international, foreignSeen, 90);
+
+  const factual = sortChannels(
+    eligibleForeign.filter(
+      (channel) =>
+        ["UK","QA","DE","FR"].includes(channel.country ?? "") &&
+        channel.groups.some((group) => FACTUAL_CATEGORIES.has(group)),
+    ),
+    "default",
+  );
+  appendPreferredIds(foreign, FACTUAL_PREFERRED_IDS, foreignById, foreignSeen, 100);
+  appendUnique(foreign, factual.filter((channel) => languageMatches(channel, ["eng"])), foreignSeen, 100);
+  appendUnique(foreign, factual, foreignSeen, 100);
+  appendUnique(foreign, sortChannels(eligibleForeign, "default"), foreignSeen, PINFLIX_FOREIGN_TOTAL);
+
+  return [
+    ...bangladesh.slice(0, PINFLIX_BANGLADESH_TOTAL),
+    ...foreign.slice(0, PINFLIX_FOREIGN_TOTAL),
+  ];
+}
 
 async function buildIptvCatalog(): Promise<IptvCatalog> {
   const [rawChannels, rawStreams, countries, categories, logos, guides] = await Promise.all([
@@ -88,9 +259,10 @@ async function buildIptvCatalog(): Promise<IptvCatalog> {
   }
 
   const appChannels: AppChannel[] = normalizeChannels(rawChannels, rawStreams);
-  const channels: Channel[] = appChannels.map((ch) =>
+  const playableChannels: Channel[] = appChannels.map((ch) =>
     toUiChannel(ch, logoByChannel.get(ch.id) ?? ch.logo ?? "", guideByChannel.get(ch.id) ?? null),
   );
+  const channels = curateChannels(playableChannels, rawChannels, logoByChannel, guideByChannel);
 
   const byId = new Map<string, Channel>();
   const byCountry = new Map<string, Channel[]>();
@@ -154,7 +326,7 @@ function containsWord(hay: string, needle: string): boolean {
 function pickFeatured(channels: Channel[]): Channel[] {
   const seen = new Set<string>();
   const out: Channel[] = [];
-  const searchable = channels.map((ch) => ({
+  const searchable = channels.filter((ch) => ch.streams.length > 0).map((ch) => ({
     ch,
     text: `${ch.shortName} ${ch.name} ${ch.altNames.join(" ")}`.toLowerCase(),
   }));
@@ -184,7 +356,7 @@ export async function getHomeData(): Promise<HomeData> {
         count: list.length,
       },
       channels: sortChannels(
-        list.filter((ch) => !ch.geoBlocked),
+        list.filter((ch) => !ch.geoBlocked && ch.streams.length > 0),
         "default",
       )
         .slice(0, 12)
@@ -248,7 +420,7 @@ export async function getChannelsByCountry(
   const categoryIds = sortCategoryIds(Object.keys(categoryCounts), categoryCounts);
   const cat = category?.trim().toLowerCase();
   const filtered = cat ? all.filter((ch) => ch.groups.includes(cat)) : all;
-  const sorted = sortChannels(filtered, sort);
+  const sorted = sortCuratedChannels(filtered, sort);
   const totalFiltered = sorted.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / CHANNELS_PER_PAGE));
   const page = Math.min(Math.max(1, requestedPage), totalPages);
@@ -294,7 +466,7 @@ export async function getChannelsByCategory(
 
   const cc = countryCode?.trim().toUpperCase();
   const filtered = cc ? all.filter((ch) => ch.country === cc) : all;
-  const sorted = sortChannels(filtered, sort);
+  const sorted = sortCuratedChannels(filtered, sort);
   const totalFiltered = sorted.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / CHANNELS_PER_PAGE));
   const page = Math.min(Math.max(1, requestedPage), totalPages);
@@ -389,7 +561,7 @@ export async function getRelatedChannels(id: string, limit = 16) {
     (channel.country ? catalog.byCountry.get(channel.country) : null) ??
     catalog.channels;
   return sortChannels(
-    pool.filter((other) => other.id !== id && !other.geoBlocked),
+    pool.filter((other) => other.id !== id && !other.geoBlocked && other.streams.length > 0),
     "default",
   )
     .slice(0, limit)

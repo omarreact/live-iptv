@@ -97,8 +97,7 @@ export default async function CountryPage({
           />
         ))}
       </div>
-
-      <div className="mt-8">
+<div className="mt-8">
         {channels.length ? (
           <ChannelGrid channels={channels} />
         ) : (

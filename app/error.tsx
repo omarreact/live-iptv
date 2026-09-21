@@ -22,7 +22,7 @@ export default function ErrorPage({
           Something interrupted the signal
         </h1>
         <p className="mx-auto mt-3 max-w-md text-sm text-muted">
-          The live guide could not be loaded. Check your connection and try again.
+          Pinflix could not load this page. Check your connection and try again.
         </p>
         <Button className="mt-6" onClick={reset}>
           Try again
