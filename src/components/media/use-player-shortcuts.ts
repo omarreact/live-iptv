@@ -62,6 +62,11 @@ export function usePlayerShortcuts({
           video.volume = Math.max(0, video.volume - 0.1);
           break;
 
+        case "m":
+          event.preventDefault();
+          video.muted = !video.muted;
+          break;
+
         case "f":
           event.preventDefault();
           void onToggleFullscreen();
