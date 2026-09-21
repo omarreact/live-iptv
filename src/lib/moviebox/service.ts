@@ -15,8 +15,10 @@ import type {
   MovieBoxStreamSource,
 } from "./types";
 
-const PLAYER_TIMEOUT_MS = 15_000;
+const PLAYER_TIMEOUT_MS = 10_000;
 const METADATA_REVALIDATE_SECONDS = 300;
+const PLAYER_DOMAIN_TTL_MS = 5 * 60_000;
+const PLAYER_DOMAIN_FALLBACK = "https://mzfi.me";
 const SEARCH_REVALIDATE_SECONDS = 120;
 const DETAIL_REVALIDATE_SECONDS = 600;
 
@@ -282,13 +284,33 @@ const loadCachedCategory = unstable_cache(
   { revalidate: METADATA_REVALIDATE_SECONDS },
 );
 
+async function safeCategory(
+  tabId: number,
+  page: number,
+  perPage: number,
+  sort: string,
+  filters: MovieBoxFilters,
+): Promise<MovieBoxCategoryResponse> {
+  try {
+    return await loadCachedCategory(tabId, page, perPage, sort, filters);
+  } catch (error: unknown) {
+    console.error("[moviebox] category failed", { tabId, page, error });
+    return {
+      page,
+      per_page: perPage,
+      total: 0,
+      items: [],
+    };
+  }
+}
+
 export async function getMovies(
   page = 1,
   sort = "RECOMMEND",
   filters: MovieBoxFilters = {},
   perPage = 24,
 ): Promise<MovieBoxCategoryResponse> {
-  return loadCachedCategory(2, page, perPage, sort, filters);
+  return safeCategory(2, page, perPage, sort, filters);
 }
 
 export async function getTvSeries(
@@ -297,7 +319,7 @@ export async function getTvSeries(
   filters: MovieBoxFilters = {},
   perPage = 24,
 ): Promise<MovieBoxCategoryResponse> {
-  return loadCachedCategory(5, page, perPage, sort, filters);
+  return safeCategory(5, page, perPage, sort, filters);
 }
 
 export async function getAnimation(
@@ -306,7 +328,7 @@ export async function getAnimation(
   filters: MovieBoxFilters = {},
   perPage = 24,
 ): Promise<MovieBoxCategoryResponse> {
-  return loadCachedCategory(8, page, perPage, sort, filters);
+  return safeCategory(8, page, perPage, sort, filters);
 }
 
 async function loadSearchSuggestions(
@@ -434,11 +456,34 @@ export async function getDetail(slug: string): Promise<unknown> {
   return loadCachedDetail(slug);
 }
 
+let cachedPlayerDomain: { value: string; expiresAt: number } | null = null;
+let playerDomainInflight: Promise<string> | null = null;
+
 async function getPlayerDomain(): Promise<string> {
-  const payload = await movieboxRequest("/media-player/get-domain");
-  const root = asRecord(payload);
-  const domain = asString(root?.data) ?? "https://netfilm.world";
-  return domain.replace(/\/$/, "");
+  if (cachedPlayerDomain && cachedPlayerDomain.expiresAt > Date.now()) {
+    return cachedPlayerDomain.value;
+  }
+  if (playerDomainInflight) return playerDomainInflight;
+
+  playerDomainInflight = (async () => {
+    try {
+      const payload = await movieboxRequest("/media-player/get-domain");
+      const root = asRecord(payload);
+      const domain = (asString(root?.data) ?? PLAYER_DOMAIN_FALLBACK).replace(/\/$/, "");
+      cachedPlayerDomain = {
+        value: domain,
+        expiresAt: Date.now() + PLAYER_DOMAIN_TTL_MS,
+      };
+      return domain;
+    } catch (error: unknown) {
+      console.warn("[moviebox] player domain lookup failed; using last known domain", error);
+      return cachedPlayerDomain?.value ?? PLAYER_DOMAIN_FALLBACK;
+    }
+  })().finally(() => {
+    playerDomainInflight = null;
+  });
+
+  return playerDomainInflight;
 }
 
 function normalizePlayerStream(
