@@ -1,9 +1,9 @@
+/** @deprecated */
 export const dynamic = "force-dynamic";
 
-/** @deprecated */
 export async function GET() {
   return Response.json(
-    { error: "This endpoint is deprecated." },
+    { deprecated: true, message: "Endpoint removed" },
     { status: 410, headers: { "cache-control": "no-store" } },
   );
 }

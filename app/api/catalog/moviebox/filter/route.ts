@@ -1,19 +1,14 @@
+/** @deprecated Use /api/moviebox/search or category endpoints */
 export const dynamic = "force-dynamic";
 
-/** @deprecated Use /api/moviebox/search or category endpoints instead */
 export async function GET() {
   return Response.json(
     {
-      source: "moviebox-public",
-      fetchedAt: new Date().toISOString(),
-      total: 0,
-      limited: false,
-      items: [],
       deprecated: true,
-      message: "This endpoint is deprecated.",
+      message: "Use /api/moviebox/search",
+      items: [],
+      total: 0,
     },
-    {
-      headers: { "cache-control": "no-store" },
-    },
+    { status: 410, headers: { "cache-control": "no-store" } },
   );
 }
