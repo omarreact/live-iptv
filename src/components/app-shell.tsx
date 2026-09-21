@@ -18,10 +18,11 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
   const watching = pathname.startsWith("/watch/");
+  const entertainment = pathname.startsWith("/entertainment");
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-fg">
-      {!watching ? (
+      {!watching && !entertainment ? (
         <header className="sticky top-0 z-40 border-b border-border bg-bg/95 backdrop-blur-sm">
           <div className="mx-auto flex h-[60px] max-w-[1400px] items-center gap-5 px-4 sm:px-6 lg:px-8">
             <Link href="/" className="tv-focus flex items-center gap-2 rounded-md" aria-label="Pinflix home">
