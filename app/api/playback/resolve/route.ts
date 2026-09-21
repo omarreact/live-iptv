@@ -1,5 +1,10 @@
 import { getPlaybackProvider } from "@/lib/providers/registry.server";
-import type { BrowserPlaybackResult, PlaybackResult } from "@/types/media";
+import type {
+  BrowserPlaybackResult,
+  PlaybackResult,
+  PlaybackSource,
+} from "@/types/media";
+import type { ResolvePlaybackInput } from "@/lib/providers/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,24 +15,65 @@ function optionalInteger(value: string | null): number | undefined {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
-function toBrowserResult(result: PlaybackResult): BrowserPlaybackResult {
+function proxyHref(
+  providerId: string,
+  input: ResolvePlaybackInput,
+  sourceIndex: number,
+): string {
+  const params = new URLSearchParams({
+    provider: providerId,
+    id: input.id,
+    source: String(sourceIndex),
+  });
+
+  if (input.slug) params.set("slug", input.slug);
+  if (input.season !== undefined) params.set("season", String(input.season));
+  if (input.episode !== undefined) params.set("episode", String(input.episode));
+
+  return `/api/playback/proxy?${params.toString()}`;
+}
+
+function browserSource(
+  source: PlaybackSource,
+  url = source.url,
+): BrowserPlaybackResult["sources"][number] {
+  return {
+    url,
+    protocol: source.protocol,
+    quality: source.quality,
+    mimeType: source.mimeType,
+  };
+}
+
+function toBrowserResult(
+  providerId: string,
+  input: ResolvePlaybackInput,
+  result: PlaybackResult,
+): BrowserPlaybackResult {
+  const warnings: string[] = [];
+  const sources = result.sources.flatMap((source, sourceIndex) => {
+    const hasProtectedHeaders =
+      source.headers && Object.keys(source.headers).length > 0;
+
+    if (!hasProtectedHeaders) {
+      return [browserSource(source)];
+    }
+
+    if (source.protocol === "mp4") {
+      return [browserSource(source, proxyHref(providerId, input, sourceIndex))];
+    }
+
+    warnings.push(
+      `${source.protocol.toUpperCase()} source requires a segment-aware server media gateway and was not exposed to the browser.`,
+    );
+    return [];
+  });
+
   return {
     title: result.title,
-    sources: result.sources.map((source) => {
-      if (source.headers && Object.keys(source.headers).length > 0) {
-        throw new Error(
-          "Protected playback headers require a server-side media gateway before browser playback.",
-        );
-      }
-
-      return {
-        url: source.url,
-        protocol: source.protocol,
-        quality: source.quality,
-        mimeType: source.mimeType,
-      };
-    }),
+    sources,
     subtitles: result.subtitles,
+    ...(warnings.length ? { warnings: [...new Set(warnings)] } : {}),
   };
 }
 
@@ -38,23 +84,31 @@ export async function GET(request: Request) {
   const slug = searchParams.get("slug") ?? undefined;
 
   if (!providerId || !id) {
-    return Response.json({ error: "provider and id are required" }, { status: 400 });
+    return Response.json(
+      { error: "provider and id are required" },
+      { status: 400 },
+    );
   }
+
+  const input: ResolvePlaybackInput = {
+    id,
+    slug,
+    season: optionalInteger(searchParams.get("season")),
+    episode: optionalInteger(searchParams.get("episode")),
+  };
 
   try {
     const provider = getPlaybackProvider(providerId);
-    const result = await provider.resolve({
-      id,
-      slug,
-      season: optionalInteger(searchParams.get("season")),
-      episode: optionalInteger(searchParams.get("episode")),
-    });
+    const result = await provider.resolve(input);
 
-    return Response.json(toBrowserResult(result), {
+    return Response.json(toBrowserResult(providerId, input, result), {
       headers: { "cache-control": "no-store" },
     });
   } catch (error: unknown) {
     console.error("[playback.resolve] failed", error);
-    return Response.json({ error: "Unable to resolve playback" }, { status: 502 });
+    return Response.json(
+      { error: "Unable to resolve playback" },
+      { status: 502 },
+    );
   }
 }
