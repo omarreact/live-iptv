@@ -56,7 +56,7 @@ The proxy remains catalog-restricted and blocks private/internal hosts. The heal
 ## Optional environment variables
 
 ```bash
-NEXT_PUBLIC_SITE_URL=https://iptv.pincodeit.com
+NEXT_PUBLIC_SITE_URL=https://pinflix.pincodeit.com
 TMDB_API_READ_TOKEN=your_tmdb_read_token
 # or legacy:
 TMDB_API_KEY=your_tmdb_api_key
@@ -86,7 +86,7 @@ npm run build
 
 ## Deployment
 
-Production: https://iptv.pincodeit.com
+Production: https://pinflix.pincodeit.com
 
 The Vercel project uses Node.js 24.
 
