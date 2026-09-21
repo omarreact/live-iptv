@@ -680,7 +680,7 @@ export function AdaptivePlayer({
         <div className="ml-auto flex items-center gap-1.5">
           <div className="hidden items-center gap-1.5 text-[11px] text-white/35 lg:flex">
             <Keyboard className="size-3.5" />
-            Space · ←/→ 10s · ↑/↓ volume · F
+            Space · ←/→ 10s · ↑/↓ volume · M mute · F
           </div>
 
           <button
