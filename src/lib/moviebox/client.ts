@@ -6,8 +6,10 @@ import type {
 } from "./types";
 
 const API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff";
-const REQUEST_TIMEOUT_MS = 10_000;
-const TOKEN_BOOTSTRAP_TIMEOUT_MS = 5_000;
+const REQUEST_TIMEOUT_MS = 6_000;
+const REQUEST_RETRY_DELAY_MS = 150;
+const REQUEST_ATTEMPTS = 2;
+const TOKEN_BOOTSTRAP_TIMEOUT_MS = 4_000;
 
 const DEFAULT_HEADERS: Record<string, string> = {
   "User-Agent":
@@ -155,6 +157,57 @@ async function requestOnce(
   return response;
 }
 
+function retryableStatus(status: number): boolean {
+  return (
+    status === 408 ||
+    status === 425 ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestWithRetry(
+  url: URL,
+  options: MovieBoxRequestOptions,
+  token: string,
+): Promise<Response> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await requestOnce(url, options, token);
+
+      if (
+        attempt + 1 < REQUEST_ATTEMPTS &&
+        retryableStatus(response.status)
+      ) {
+        await response.body?.cancel().catch(() => undefined);
+        await delay(REQUEST_RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+
+      return response;
+    } catch (error: unknown) {
+      lastError = error;
+
+      if (attempt + 1 >= REQUEST_ATTEMPTS) {
+        throw error;
+      }
+
+      await delay(REQUEST_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  throw lastError ?? new Error("MovieBox request failed");
+}
+
 export async function movieboxRequest<T = unknown>(
   path: string,
   options: MovieBoxRequestOptions = {},
@@ -172,13 +225,13 @@ export async function movieboxRequest<T = unknown>(
   // Most catalog endpoints are public. Do not block every cold Vercel
   // invocation on an extra /home token request before making the real call.
   let token = currentToken();
-  let response = await requestOnce(url, options, token);
+  let response = await requestWithRetry(url, options, token);
 
   // Only pay the token bootstrap cost when the upstream explicitly requires it.
   if (response.status === 401 || response.status === 403) {
     token = currentToken() || (await bootstrapToken());
     if (token) {
-      response = await requestOnce(url, options, token);
+      response = await requestWithRetry(url, options, token);
     }
   }
 

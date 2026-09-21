@@ -9,6 +9,7 @@ import { EntertainmentDetailPlayer } from "@/components/entertainment/detail-pla
 import {
   normalizeMovieBoxCatalog,
   normalizeMovieBoxHome,
+  normalizeMovieBoxItem,
   normalizeMovieBoxMediaDetail,
 } from "@/lib/media/normalize-moviebox";
 import { normalizeMovieBoxDetail } from "@/lib/moviebox/normalize";
@@ -24,6 +25,7 @@ import type {
   MovieBoxCategoryResponse,
   MovieBoxItem,
 } from "@/lib/moviebox/types";
+import type { MediaDetail } from "@/types/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +76,34 @@ function findItem(
   return items.find((item) => item.slug === slug) ?? null;
 }
 
+function fallbackDetail(
+  item: MovieBoxItem,
+  slug: string,
+): MediaDetail {
+  const base = normalizeMovieBoxItem(item);
+  const playback =
+    item.subject_id !== null && item.subject_id !== undefined
+      ? {
+          provider: "moviebox",
+          id: String(item.subject_id),
+          slug,
+          defaultSeason: 1,
+          defaultEpisode: 1,
+        }
+      : null;
+
+  return {
+    ...base,
+    detailKey: slug,
+    overview:
+      "Full title details are temporarily unavailable. You can still retry playback if a stream reference is available.",
+    genres: [],
+    trailer: null,
+    seasons: [],
+    playback,
+  };
+}
+
 export default async function EntertainmentPage({
   searchParams,
 }: {
@@ -114,7 +144,7 @@ export default async function EntertainmentPage({
     visibleItems = catalog.items;
   }
 
-  let detail = null;
+  let detail: MediaDetail | null = null;
 
   if (detailSlug) {
     const fallback =
@@ -137,6 +167,7 @@ export default async function EntertainmentPage({
       );
     } catch (error: unknown) {
       console.error("[entertainment] detail failed", error);
+      detail = fallbackDetail(fallback, detailSlug);
     }
   }
 
