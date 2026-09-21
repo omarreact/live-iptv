@@ -276,24 +276,28 @@ export function AdaptivePlayer({
       }
 
       if (protocol === "hls") {
-        if (media.canPlayType("application/vnd.apple.mpegurl")) {
-          media.src = source.url;
-          setAdaptiveQualities([
-            {
-              value: "auto",
-              label: "Auto",
-              detail: "Native HLS",
-              isBest: true,
-            },
-          ]);
-          return;
-        }
-
         const hlsModule = await import("hls.js");
         if (cancelled) return;
 
         const Hls = hlsModule.default;
+
+        // Prefer hls.js whenever MediaSource is available. Chromium-based
+        // browsers can report native HLS as "maybe" even when playback is
+        // unreliable, especially on Android.
         if (!Hls.isSupported()) {
+          if (media.canPlayType("application/vnd.apple.mpegurl")) {
+            media.src = source.url;
+            setAdaptiveQualities([
+              {
+                value: "auto",
+                label: "Auto",
+                detail: "Native HLS",
+                isBest: true,
+              },
+            ]);
+            return;
+          }
+
           failCurrentSource("HLS playback is not supported by this browser.");
           return;
         }
