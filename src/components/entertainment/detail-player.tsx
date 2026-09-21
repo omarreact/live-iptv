@@ -2,18 +2,11 @@
 
 import Link from "next/link";
 import { Captions, LoaderCircle, Play, Star, X } from "lucide-react";
-import { useMemo, useState } from "react";
-import type {
-  MovieBoxCaptionResponse,
-  MovieBoxDetailView,
-  MovieBoxStreamResponse,
-} from "@/lib/moviebox/types";
+import { useState } from "react";
+import { AdaptivePlayer } from "@/components/media/adaptive-player";
+import type { MovieBoxDetailView } from "@/lib/moviebox/types";
 import { cn } from "@/lib/utils";
-
-function qualityValue(value?: string): number {
-  const match = String(value ?? "").match(/\d+/);
-  return match ? Number(match[0]) : 0;
-}
+import type { BrowserPlaybackResult } from "@/types/media";
 
 export function EntertainmentDetailPlayer({
   detail,
@@ -25,40 +18,27 @@ export function EntertainmentDetailPlayer({
   const initialSeason = detail.seasons[0]?.se ?? 1;
   const [season, setSeason] = useState(initialSeason);
   const [episode, setEpisode] = useState(1);
-  const [stream, setStream] = useState<MovieBoxStreamResponse | null>(null);
-  const [activeSource, setActiveSource] = useState(0);
-  const [captions, setCaptions] = useState<MovieBoxCaptionResponse["captions"]>([]);
+  const [playback, setPlayback] = useState<BrowserPlaybackResult | null>(null);
   const [loadingStream, setLoadingStream] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const activeSeason = detail.seasons.find((entry) => entry.se === season);
   const episodeCount = Math.max(1, activeSeason?.maxEp ?? 1);
 
-  const orderedSources = useMemo(
-    () =>
-      [...(stream?.sources ?? [])].sort(
-        (a, b) => qualityValue(b.quality) - qualityValue(a.quality),
-      ),
-    [stream],
-  );
-
-  const selectedSource = orderedSources[activeSource] ?? null;
+  function resetPlayback(): void {
+    setPlayback(null);
+    setError(null);
+  }
 
   function selectSeason(nextSeason: number): void {
     setSeason(nextSeason);
     setEpisode(1);
-    setStream(null);
-    setCaptions([]);
-    setActiveSource(0);
-    setError(null);
+    resetPlayback();
   }
 
   function selectEpisode(nextEpisode: number): void {
     setEpisode(nextEpisode);
-    setStream(null);
-    setCaptions([]);
-    setActiveSource(0);
-    setError(null);
+    resetPlayback();
   }
 
   async function play(): Promise<void> {
@@ -69,21 +49,21 @@ export function EntertainmentDetailPlayer({
 
     setLoadingStream(true);
     setError(null);
-    setCaptions([]);
 
     try {
       const params = new URLSearchParams({
-        subject_id: String(detail.subjectId),
-        detail_path: detail.detailPath,
-        se: String(season),
-        ep: String(episode),
+        provider: "moviebox",
+        id: String(detail.subjectId),
+        slug: detail.detailPath,
+        season: String(season),
+        episode: String(episode),
       });
 
-      const response = await fetch(`/api/moviebox/stream?${params.toString()}`, {
+      const response = await fetch(`/api/playback/resolve?${params.toString()}`, {
         cache: "no-store",
       });
 
-      const payload = (await response.json()) as MovieBoxStreamResponse & {
+      const payload = (await response.json()) as BrowserPlaybackResult & {
         error?: string;
       };
 
@@ -91,37 +71,9 @@ export function EntertainmentDetailPlayer({
         throw new Error(payload.error ?? "Failed to resolve playback.");
       }
 
-      setStream(payload);
-      setActiveSource(0);
-
-      if (payload.has_resource) {
-        const actualSeason =
-          typeof payload.se === "number" ? payload.se : season;
-        const actualEpisode =
-          typeof payload.ep === "number" ? payload.ep : episode;
-
-        const captionParams = new URLSearchParams({
-          subject_id: String(detail.subjectId),
-          detail_path: detail.detailPath,
-          se: String(actualSeason),
-          ep: String(actualEpisode),
-        });
-
-        void fetch(`/api/moviebox/captions?${captionParams.toString()}`, {
-          cache: "no-store",
-        })
-          .then(async (result) => {
-            if (!result.ok) return null;
-            return (await result.json()) as MovieBoxCaptionResponse;
-          })
-          .then((captionPayload) => {
-            setCaptions(captionPayload?.captions ?? []);
-          })
-          .catch(() => {
-            setCaptions([]);
-          });
-      }
+      setPlayback(payload);
     } catch (requestError: unknown) {
+      setPlayback(null);
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -147,9 +99,7 @@ export function EntertainmentDetailPlayer({
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">
               Entertainment
             </p>
-            <h2 className="mt-0.5 line-clamp-1 text-lg font-bold">
-              {detail.title}
-            </h2>
+            <h2 className="mt-0.5 line-clamp-1 text-lg font-bold">{detail.title}</h2>
           </div>
 
           <Link
@@ -253,7 +203,7 @@ export function EntertainmentDetailPlayer({
                 <button
                   type="button"
                   onClick={() => void play()}
-                  disabled={loadingStream || !detail.subjectId}
+                  disabled={loadingStream || !detail.subjectId || !detail.detailPath}
                   className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
                 >
                   {loadingStream ? (
@@ -261,13 +211,13 @@ export function EntertainmentDetailPlayer({
                   ) : (
                     <Play className="size-4 fill-current" />
                   )}
-                  {loadingStream ? "Resolving…" : "Play"}
+                  {loadingStream ? "Resolving…" : playback ? "Reload stream" : "Play"}
                 </button>
 
-                {captions.length > 0 ? (
+                {playback?.subtitles.length ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs text-muted">
                     <Captions className="size-4" />
-                    {captions.length} subtitles
+                    {playback.subtitles.length} subtitles
                   </span>
                 ) : null}
               </div>
@@ -278,10 +228,10 @@ export function EntertainmentDetailPlayer({
                 </p>
               ) : null}
 
-              {stream && !orderedSources.length && !stream.has_resource ? (
+              {playback && playback.sources.length === 0 ? (
                 <div className="mt-5 rounded-xl border border-border bg-surface p-4">
                   <p className="text-sm text-muted">
-                    {stream.note ?? "No playback source is currently available."}
+                    No browser-playable source is currently available for this title.
                   </p>
 
                   {detail.trailer ? (
@@ -295,60 +245,14 @@ export function EntertainmentDetailPlayer({
                 </div>
               ) : null}
 
-              {selectedSource ? (
+              {playback && playback.sources.length > 0 ? (
                 <div className="mt-5">
-                  <video
-                    key={selectedSource.url}
-                    controls
+                  <AdaptivePlayer
+                    key={`${detail.subjectId}-${season}-${episode}`}
+                    result={playback}
+                    poster={detail.poster ?? undefined}
                     autoPlay
-                    playsInline
-                    className="aspect-video w-full rounded-xl bg-black"
-                    src={selectedSource.url}
-                  >
-                    {captions.map((caption, index) => {
-                      const src = caption.url ?? caption.file ?? caption.src;
-                      if (!src) return null;
-
-                      return (
-                        <track
-                          key={String(src) + "-" + index}
-                          kind="subtitles"
-                          src={src}
-                          srcLang={
-                            caption.language ??
-                            caption.lang ??
-                            caption.lan ??
-                            "en"
-                          }
-                          label={
-                            caption.label ??
-                            caption.lanName ??
-                            caption.language ??
-                            "Subtitle"
-                          }
-                          default={index === 0}
-                        />
-                      );
-                    })}
-                  </video>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {orderedSources.map((source, index) => (
-                      <button
-                        type="button"
-                        key={source.url}
-                        onClick={() => setActiveSource(index)}
-                        className={cn(
-                          "rounded-full px-3 py-1.5 text-xs font-semibold",
-                          activeSource === index
-                            ? "bg-white text-black"
-                            : "bg-surface text-muted hover:text-fg",
-                        )}
-                      >
-                        {source.quality ?? source.type ?? `Source ${index + 1}`}
-                      </button>
-                    ))}
-                  </div>
+                  />
                 </div>
               ) : null}
             </div>
