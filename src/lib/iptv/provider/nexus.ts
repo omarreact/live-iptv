@@ -20,7 +20,7 @@ function toPreview(channel: NexusChannel): ChannelPreview | null {
   const name = channel.name?.trim();
   if (!id || !name) return null;
 
-  return {
+  const preview = {
     id,
     shortName: name,
     logo: channel.logo ?? "",
@@ -28,7 +28,10 @@ function toPreview(channel: NexusChannel): ChannelPreview | null {
     country: channel.country?.toUpperCase() ?? null,
     quality: channel.best_quality ?? null,
     geoBlocked: false,
+    available: channel.online !== false && (channel.stream_count ?? 0) > 0,
   };
+
+  return preview;
 }
 
 async function fetchShard(path: string): Promise<NexusChannel[]> {
