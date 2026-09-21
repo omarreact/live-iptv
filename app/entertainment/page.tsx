@@ -6,6 +6,11 @@ import {
   type EntertainmentView,
 } from "@/components/entertainment/catalog";
 import { EntertainmentDetailPlayer } from "@/components/entertainment/detail-player";
+import {
+  normalizeMovieBoxCatalog,
+  normalizeMovieBoxHome,
+  normalizeMovieBoxMediaDetail,
+} from "@/lib/media/normalize-moviebox";
 import { normalizeMovieBoxDetail } from "@/lib/moviebox/normalize";
 import {
   getAnimation,
@@ -123,8 +128,11 @@ export default async function EntertainmentPage({
       } satisfies MovieBoxItem);
 
     try {
-      detail = normalizeMovieBoxDetail(
-        await getDetail(detailSlug),
+      detail = normalizeMovieBoxMediaDetail(
+        normalizeMovieBoxDetail(
+          await getDetail(detailSlug),
+          fallback,
+        ),
         fallback,
       );
     } catch (error: unknown) {
@@ -147,15 +155,18 @@ export default async function EntertainmentPage({
         {query && catalog ? (
           <EntertainmentSearchResults
             query={query}
-            catalog={catalog}
+            catalog={normalizeMovieBoxCatalog(catalog)}
             context={context}
           />
         ) : view === "home" && home ? (
-          <EntertainmentHome home={home} context={context} />
+          <EntertainmentHome
+            home={normalizeMovieBoxHome(home)}
+            context={context}
+          />
         ) : catalog ? (
           <EntertainmentCatalog
             title={heading}
-            catalog={catalog}
+            catalog={normalizeMovieBoxCatalog(catalog)}
             context={context}
           />
         ) : (
