@@ -55,7 +55,7 @@ async function sportsItems(country: string): Promise<HotItem[]> {
     }),
   );
 
-  const live = programmes.filter((item): item is HotItem => Boolean(item));
+  const live = programmes.filter((item) => item !== null);
   if (live.length) return live.slice(0, 3);
 
   const first = candidates[0];
