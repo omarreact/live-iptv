@@ -271,6 +271,39 @@ export function AdaptivePlayer({
 
     async function startPlayback() {
       if (protocol === "mp4") {
+        // Same-origin playback proxies can be checked before assigning them to
+        // <video>. Otherwise an upstream 4xx/5xx is surfaced by browsers as
+        // MEDIA_ERR_SRC_NOT_SUPPORTED, which looks like a codec problem even
+        // when the real failure is the provider/CDN.
+        if (source.url.startsWith("/api/playback/proxy")) {
+          try {
+            const probe = await fetch(source.url, {
+              method: "HEAD",
+              cache: "no-store",
+            });
+            if (cancelled) return;
+
+            if (!probe.ok) {
+              const upstreamStatus = probe.headers.get(
+                "x-pinflix-upstream-status",
+              );
+
+              failCurrentSource(
+                upstreamStatus === "426"
+                  ? "The provider's media server is rejecting this stream from Pinflix right now."
+                  : "The provider's media source is temporarily unavailable.",
+              );
+              return;
+            }
+          } catch {
+            if (cancelled) return;
+            failCurrentSource(
+              "The provider's media source could not be reached.",
+            );
+            return;
+          }
+        }
+
         media.src = source.url;
         return;
       }
