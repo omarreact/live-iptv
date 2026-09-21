@@ -567,7 +567,9 @@ async function fetchPlayerData(
     "&ep=" +
     ep +
     "&detailPath=" +
-    encodeURIComponent(detailPath);
+    encodeURIComponent(detailPath) +
+    "&_ts=" +
+    Date.now();
 
   const response = await fetch(playUrl, {
     headers: {
