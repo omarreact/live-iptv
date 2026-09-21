@@ -89,7 +89,7 @@ MEDIA_SOURCES_JSON='[
     "baseUrl": "http://192.168.1.50/movies/"
   }
 ]'
-PINFLIX_APP_ORIGIN="https://iptv.pincodeit.com"
+PINFLIX_APP_ORIGIN="https://pinflix.pincodeit.com"
 ```
 
 Optional playback compatibility settings:
