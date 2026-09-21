@@ -8,9 +8,19 @@ export const metadata: Metadata = {
     template: "%s · Pinflix",
   },
   description:
-    "Watch public live television from around the world. Find a channel, press play, and watch.",
+    "Watch live TV and browse movies, TV series, and animation with a fast, mobile-first Pinflix experience.",
   applicationName: "Pinflix",
-  keywords: ["live TV", "IPTV", "public television", "world TV", "live channels", "Pinflix"],
+  keywords: [
+    "live TV",
+    "IPTV",
+    "public television",
+    "world TV",
+    "live channels",
+    "movies",
+    "TV series",
+    "animation",
+    "Pinflix",
+  ],
   icons: {
     icon: "/favicon.svg",
   },
@@ -20,12 +30,14 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "Pinflix",
     title: "Pinflix — Watch the world live",
-    description: "The simplest way to find and watch public live television from around the world.",
+    description:
+      "Watch live TV and browse movies, TV series, and animation on Pinflix.",
   },
   twitter: {
     card: "summary_large_image",
     title: "Pinflix — Watch the world live",
-    description: "The simplest way to find and watch public live television from around the world.",
+    description:
+      "Watch live TV and browse movies, TV series, and animation on Pinflix.",
   },
 };
 

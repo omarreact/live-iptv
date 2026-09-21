@@ -12,7 +12,9 @@ export const runtime = "nodejs";
 function optionalInteger(value: string | null): number | undefined {
   if (value === null || value.trim() === "") return undefined;
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 10_000
+    ? parsed
+    : undefined;
 }
 
 function proxyHref(

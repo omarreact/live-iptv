@@ -29,7 +29,7 @@ automatic source failover
       ↓
 hls.js / native HLS / mpegts.js
 
-Movies & Web Series use their own CineplexBD/private-bridge pipeline and are not mixed into the Live TV catalog.
+Movies, TV Series, and Animation use a separate server-side entertainment provider/resolver with same-origin playback and subtitle gateways. The optional Bangladesh private-network bridge remains isolated from the public Live TV catalog.
 ```
 
 The health layer combines transport safety, stream restrictions, quality, and passive runtime observations. Each proxied upstream attempt records success/failure plus response latency. Pinflix keeps a bounded, short-lived in-memory health profile per source (success ratio, consecutive failures, and EWMA latency), then re-ranks primary/backup sources on later opens. This is intentionally viewer-anonymous and Vercel-safe: it stores no user identifiers and does not run expensive background probes.
