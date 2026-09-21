@@ -95,10 +95,7 @@ export default async function EntertainmentPage({
             context={context}
           />
         ) : view === "home" && home ? (
-          <EntertainmentHome
-            home={normalizeMovieBoxHome(home)}
-            context={context}
-          />
+          <EntertainmentHome home={normalizeMovieBoxHome(home)} />
         ) : catalog ? (
           <EntertainmentCatalog
             title={heading}
