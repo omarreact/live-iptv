@@ -706,7 +706,25 @@ async function fetchPlayerData(
     );
   }
 
-  return parsePlayerData(await response.json());
+  const parsed = parsePlayerData(await response.json());
+  const mediaHeaders = {
+    Referer: playerReferer,
+    Origin: new URL(domain).origin,
+  };
+
+  const attachMediaHeaders = (stream: UpstreamPlayerStream): UpstreamPlayerStream => ({
+    ...stream,
+    headers: {
+      ...mediaHeaders,
+      ...(stream.headers ?? {}),
+    },
+  });
+
+  return {
+    ...parsed,
+    streams: parsed.streams.map(attachMediaHeaders),
+    dash: parsed.dash.map(attachMediaHeaders),
+  };
 }
 
 function normalizeStreamData(
