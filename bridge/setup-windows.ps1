@@ -90,6 +90,7 @@ $lines = @(
     "ALLOWED_STREAM_IDS=105"
     ""
     "PINFLIX_APP_ORIGIN=$PinflixOrigin"
+    "MOVIEBOX_BRIDGE_ENABLED=true"
 )
 
 if ($PublicBridgeUrl.Trim()) {
@@ -120,6 +121,7 @@ Write-Host "  3. Publish port 8787 through an HTTPS tunnel/reverse proxy."
 Write-Host "  4. In Vercel set:"
 Write-Host "       PINFLIX_BD_BRIDGE_URL=https://your-bridge-hostname"
 Write-Host "       PINFLIX_BD_BRIDGE_SECRET=$bridgeSecret"
+Write-Host "       PINFLIX_MOVIEBOX_BRIDGE_ENABLED=true"
 Write-Host ""
 if (-not $dhakaOk -or -not $cineplexOk) {
     Write-Warning "At least one provider was not reachable during setup. The bridge can still start, but that provider will remain unavailable until this PC/network can reach it."
