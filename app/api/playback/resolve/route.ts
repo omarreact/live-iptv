@@ -55,12 +55,21 @@ function toBrowserResult(
     const hasProtectedHeaders =
       source.headers && Object.keys(source.headers).length > 0;
 
-    if (!hasProtectedHeaders) {
-      return [browserSource(source)];
+    const shouldRefreshThroughProxy =
+      source.protocol === "mp4" &&
+      (hasProtectedHeaders || providerId === "moviebox");
+
+    if (shouldRefreshThroughProxy) {
+      return [
+        browserSource(
+          source,
+          proxyHref(providerId, input, sourceIndex),
+        ),
+      ];
     }
 
-    if (source.protocol === "mp4") {
-      return [browserSource(source, proxyHref(providerId, input, sourceIndex))];
+    if (!hasProtectedHeaders) {
+      return [browserSource(source)];
     }
 
     warnings.push(
