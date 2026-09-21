@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import "../src/styles.css";
 import { AppShell } from "@/components/app-shell";
 
@@ -16,7 +15,7 @@ export const metadata: Metadata = {
     icon: "/favicon.svg",
   },
   manifest: "/manifest.webmanifest",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://iptv.pincodeit.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://pinflix.pincodeit.com"),
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
@@ -44,7 +43,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className="bg-bg text-fg antialiased">
         <AppShell>{children}</AppShell>
-        <SpeedInsights />
       </body>
     </html>
   );
