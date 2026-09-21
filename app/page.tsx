@@ -1,24 +1,28 @@
-import { headers } from "next/headers";
 import { Search } from "lucide-react";
+import { unstable_cache } from "next/cache";
+import { headers } from "next/headers";
 import { ChannelRow } from "@/components/channel-row";
 import { HotNow } from "@/components/hot-now";
 import { RecentRow } from "@/components/recent-row";
-import { getFastCategoryChannels, getFastCountryChannels } from "@/lib/iptv/provider/multi";
-import { countryName, resolveViewerLocation } from "@/lib/viewer-location";
+import { getBangladeshPrivatePreviews } from "@/lib/iptv/private-channels";
+import { getHomeData } from "@/lib/iptv/provider/iptv-org";
+import { trustedViewerCountry } from "@/lib/viewer-location";
+import type { HomeData } from "@/lib/iptv/types";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 600;
+
+const getCachedHomeData = unstable_cache(getHomeData, ["pinflix-home-data-v2"], {
+  revalidate: 600,
+});
 
 export default async function HomePage() {
-  const location = resolveViewerLocation(await headers());
+  const country = trustedViewerCountry(await headers());
+  const localChannels = country === "BD" ? getBangladeshPrivatePreviews() : [];
 
-  const [local, sports, news, entertainment] = await Promise.all([
-    getFastCountryChannels(location.country, 18),
-    getFastCategoryChannels("sports", 16, location.country),
-    getFastCategoryChannels("news", 16, location.country),
-    getFastCategoryChannels("entertainment", 16, location.country),
-  ]);
-
-  const localName = countryName(location.country);
+  const data: HomeData = await getCachedHomeData().catch((error: unknown) => {
+    console.error("Unable to load the Pinflix home catalog", error);
+    return { total: 0, countryCount: 0, featured: [], rows: [] };
+  });
 
   return (
     <main className="pb-14">
@@ -26,13 +30,13 @@ export default async function HomePage() {
         <div className="flex items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">Live TV</h1>
-            <p className="mt-1 text-sm text-muted">
-              {location.city ? `Local TV for ${location.city}, ${localName}` : `Local TV for ${localName}`}
-            </p>
+            <p className="mt-1 text-sm text-muted">Local first. Watch the world live.</p>
           </div>
-          <p className="hidden text-xs text-subtle sm:block">
-            Local-first · health-aware streams
-          </p>
+          {data.total > 0 ? (
+            <p className="hidden text-xs text-subtle sm:block">
+              {data.total.toLocaleString()} channels · {data.countryCount.toLocaleString()} countries
+            </p>
+          ) : null}
         </div>
 
         <form action="/search" method="get" className="relative mt-5 max-w-2xl">
@@ -48,54 +52,50 @@ export default async function HomePage() {
       </section>
 
       <div className="mx-auto max-w-[1400px] space-y-9">
-        <HotNow country={location.country} />
-
-        <ChannelRow
-          category={{
-            id: "local",
-            name: `${localName} TV`,
-            description: "",
-            count: local.channels.length,
-          }}
-          channels={local.channels}
-          viewAllHref={`/country/${location.country.toLowerCase()}`}
-        />
+        <HotNow country={country} />
 
         <RecentRow />
 
-        <ChannelRow
-          category={{ id: "sports", name: "Live Sports", description: "", count: sports.channels.length }}
-          channels={sports.channels}
-        />
+        {localChannels.length > 0 ? (
+          <ChannelRow
+            category={{
+              id: "bangladesh-local",
+              name: "Bangladesh Local",
+              description: "Local channels available through your Bangladesh connection.",
+              count: localChannels.length,
+            }}
+            channels={localChannels}
+            showAll={false}
+          />
+        ) : null}
 
-        <ChannelRow
-          category={{ id: "news", name: "News", description: "", count: news.channels.length }}
-          channels={news.channels}
-        />
+        {data.featured.length > 0 ? (
+          <ChannelRow
+            category={{ id: "live", name: "Live Now", description: "", count: data.featured.length }}
+            channels={data.featured}
+            showAll={false}
+          />
+        ) : null}
 
-        <ChannelRow
-          category={{
-            id: "entertainment",
-            name: "Entertainment TV",
-            description: "",
-            count: entertainment.channels.length,
-          }}
-          channels={entertainment.channels}
-        />
+        {data.rows.map((row) => (
+          <ChannelRow key={row.category.id} category={row.category} channels={row.channels} />
+        ))}
       </div>
 
-      {!local.channels.length && !sports.channels.length && !news.channels.length ? (
+      {data.total === 0 ? (
         <section className="mx-auto mt-10 max-w-[1400px] px-4 sm:px-6 lg:px-8">
           <div className="rounded-xl border border-border bg-surface p-6">
-            <p className="font-medium">Live channels are temporarily unavailable.</p>
-            <p className="mt-1 text-sm text-muted">Try again shortly.</p>
+            <p className="font-medium">The global guide is temporarily unavailable.</p>
+            <p className="mt-1 text-sm text-muted">
+              Local TV and Hot Now will continue trying independent providers.
+            </p>
           </div>
         </section>
       ) : null}
 
       <footer className="mx-auto mt-14 max-w-[1400px] border-t border-border px-4 pt-6 text-xs leading-5 text-subtle sm:px-6 lg:px-8">
-        Pinflix races multiple public channel indexes and prefers the first healthy result.
-        Availability still varies by broadcaster and location.
+        Pinflix combines multiple public channel indexes and health signals. Availability varies by
+        broadcaster and location.
       </footer>
     </main>
   );
