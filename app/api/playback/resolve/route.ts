@@ -1,11 +1,6 @@
 import { assertSafeUrl } from "@/lib/iptv/proxy.server";
 import { getPlaybackProvider } from "@/lib/providers/registry.server";
-import { resolveMovieBoxBridge } from "@/lib/moviebox/bridge.server";
-import type {
-  BrowserPlaybackResult,
-  PlaybackResult,
-  PlaybackSource,
-} from "@/types/media";
+import type { BrowserPlaybackResult, PlaybackResult, PlaybackSource } from "@/types/media";
 import type { ResolvePlaybackInput } from "@/lib/providers/types";
 
 export const dynamic = "force-dynamic";
@@ -14,16 +9,10 @@ export const runtime = "nodejs";
 function optionalInteger(value: string | null): number | undefined {
   if (value === null || value.trim() === "") return undefined;
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 10_000
-    ? parsed
-    : undefined;
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 10_000 ? parsed : undefined;
 }
 
-function proxyHref(
-  providerId: string,
-  input: ResolvePlaybackInput,
-  sourceIndex: number,
-): string {
+function proxyHref(providerId: string, input: ResolvePlaybackInput, sourceIndex: number): string {
   const params = new URLSearchParams({
     provider: providerId,
     id: input.id,
@@ -67,31 +56,6 @@ function browserSource(
   };
 }
 
-
-function toBridgeBrowserResult(
-  input: ResolvePlaybackInput,
-  result: PlaybackResult,
-  sources: PlaybackSource[],
-): BrowserPlaybackResult {
-  return {
-    title: result.title,
-    sources: sources.flatMap((source) => {
-      try {
-        return [browserSource(source, assertSafeUrl(source.url).href)];
-      } catch {
-        return [];
-      }
-    }),
-    subtitles: result.subtitles.map((subtitle, subtitleIndex) => ({
-      ...subtitle,
-      url: subtitleHref("moviebox", input, subtitleIndex),
-    })),
-    warnings: [
-      "Playback is using the configured Pinflix media bridge.",
-    ],
-  };
-}
-
 function toBrowserResult(
   providerId: string,
   input: ResolvePlaybackInput,
@@ -99,8 +63,7 @@ function toBrowserResult(
 ): BrowserPlaybackResult {
   const warnings: string[] = [];
   const sources = result.sources.flatMap((source, sourceIndex) => {
-    const hasProtectedHeaders =
-      source.headers && Object.keys(source.headers).length > 0;
+    const hasProtectedHeaders = source.headers && Object.keys(source.headers).length > 0;
 
     let safeDirectUrl: string;
     try {
@@ -111,26 +74,17 @@ function toBrowserResult(
     }
 
     const shouldRefreshThroughProxy =
-      source.protocol === "mp4" &&
-      (hasProtectedHeaders || providerId === "moviebox");
+      hasProtectedHeaders || (providerId === "moviebox" && source.protocol === "mp4");
 
     if (shouldRefreshThroughProxy) {
-      return [
-        browserSource(
-          source,
-          proxyHref(providerId, input, sourceIndex),
-        ),
-      ];
+      return [browserSource(source, proxyHref(providerId, input, sourceIndex))];
     }
 
     if (!hasProtectedHeaders) {
       return [browserSource(source, safeDirectUrl)];
     }
 
-    warnings.push(
-      `${source.protocol.toUpperCase()} source requires a segment-aware server media gateway and was not exposed to the browser.`,
-    );
-    return [];
+    return [browserSource(source, proxyHref(providerId, input, sourceIndex))];
   });
 
   if (sources.length === 0) {
@@ -165,10 +119,7 @@ export async function GET(request: Request) {
     id.length > 256 ||
     (slug && slug.length > 512)
   ) {
-    return Response.json(
-      { error: "Invalid playback request" },
-      { status: 400 },
-    );
+    return Response.json({ error: "Invalid playback request" }, { status: 400 });
   }
 
   const input: ResolvePlaybackInput = {
@@ -182,32 +133,18 @@ export async function GET(request: Request) {
     const provider = getPlaybackProvider(providerId);
     const result = await provider.resolve(input);
 
-    let browserResult = toBrowserResult(providerId, input, result);
-
-    if (providerId === "moviebox") {
-      const bridgedSources = await resolveMovieBoxBridge(input);
-      if (bridgedSources?.length) {
-        browserResult = toBridgeBrowserResult(
-          input,
-          result,
-          bridgedSources,
-        );
-      }
-    }
+    const browserResult = toBrowserResult(providerId, input, result);
 
     return Response.json(browserResult, {
       headers: {
         "cache-control": "private, no-store, no-cache, max-age=0, must-revalidate",
         pragma: "no-cache",
         expires: "0",
-        "x-pinflix-playback-revision": "moviebox-bridge-v3",
+        "x-pinflix-playback-revision": "direct-provider-v1",
       },
     });
   } catch (error: unknown) {
     console.error("[playback.resolve] failed", error);
-    return Response.json(
-      { error: "Unable to resolve playback" },
-      { status: 502 },
-    );
+    return Response.json({ error: "Unable to resolve playback" }, { status: 502 });
   }
 }

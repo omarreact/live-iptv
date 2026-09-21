@@ -19,14 +19,6 @@ export default defineConfig([
       "react-hooks/purity": "off",
     },
   },
-  {
-    files: ["bridge/**/*.mjs"],
-    rules: {
-      "no-undef": "off",
-      "no-useless-assignment": "off",
-      "@typescript-eslint/no-unused-vars": "off",
-    },
-  },
   prettier,
   globalIgnores([".next/**", "out/**", "dist/**", ".vercel/**"]),
 ]);

@@ -25,17 +25,82 @@ const PASSTHROUGH_RESPONSE_HEADERS = [
   "last-modified",
 ] as const;
 
+function isManifestContentType(value: string | null, sourceUrl: string): boolean {
+  const type = value?.split(";")[0]?.trim().toLowerCase() ?? "";
+  const path = new URL(sourceUrl).pathname.toLowerCase();
+  return (
+    type.includes("mpegurl") ||
+    type.includes("dash+xml") ||
+    path.endsWith(".m3u8") ||
+    path.endsWith(".mpd")
+  );
+}
+
+function manifestChildUrl(
+  origin: string,
+  sourceUrl: URL,
+  child: string,
+  query: URLSearchParams,
+): string {
+  const target = new URL(child, sourceUrl);
+  if (target.hostname !== sourceUrl.hostname) return target.href;
+
+  const next = new URL("/api/playback/proxy", origin);
+  for (const [key, value] of query) {
+    if (key !== "target") next.searchParams.set(key, value);
+  }
+  next.searchParams.set("target", target.href);
+  return next.href;
+}
+
+function rewriteManifest(
+  text: string,
+  sourceUrl: string,
+  origin: string,
+  query: URLSearchParams,
+): string {
+  const base = new URL(sourceUrl);
+  const rewrite = (value: string): string => {
+    try {
+      return manifestChildUrl(origin, base, value, query);
+    } catch {
+      return value;
+    }
+  };
+
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      if (!line.trim()) return line;
+      const withAttributes = line.replace(
+        /URI="([^"]+)"/gi,
+        (_match, value: string) => `URI="${rewrite(value)}"`,
+      );
+      if (withAttributes.trimStart().startsWith("#")) return withAttributes;
+      if (withAttributes.includes("<BaseURL>")) {
+        return withAttributes.replace(
+          /(<BaseURL>)([^<]+)(<\/BaseURL>)/i,
+          (_match, start: string, value: string, end: string) => `${start}${rewrite(value)}${end}`,
+        );
+      }
+      if (withAttributes.trimStart().startsWith("<")) {
+        return withAttributes.replace(
+          /(media|initialization|sourceURL)="([^"]+)"/gi,
+          (_match, name: string, value: string) => `${name}="${rewrite(value)}"`,
+        );
+      }
+      return rewrite(withAttributes.trim());
+    })
+    .join("\n");
+}
+
 function optionalInteger(value: string | null): number | undefined {
   if (value === null || value.trim() === "") return undefined;
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 10_000
-    ? parsed
-    : undefined;
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 10_000 ? parsed : undefined;
 }
 
-function safeProviderHeaders(
-  headers: Record<string, string> | undefined,
-): Headers {
+function safeProviderHeaders(headers: Record<string, string> | undefined): Headers {
   const result = new Headers();
 
   for (const [name, value] of Object.entries(headers ?? {})) {
@@ -129,11 +194,13 @@ function upstreamFailure(status: number): Response {
 }
 
 async function proxy(request: Request, headOnly: boolean): Promise<Response> {
-  const { searchParams } = new URL(request.url);
+  const requestUrl = new URL(request.url);
+  const { searchParams } = requestUrl;
   const providerId = searchParams.get("provider") ?? "";
   const id = searchParams.get("id") ?? "";
   const slug = searchParams.get("slug") ?? undefined;
   const sourceIndex = Number(searchParams.get("source"));
+  const target = searchParams.get("target");
 
   if (
     !providerId ||
@@ -163,26 +230,12 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
     const source = result.sources[sourceIndex];
 
     if (!source) {
-      return Response.json(
-        { error: "Playback source not found" },
-        { status: 404 },
-      );
+      return Response.json({ error: "Playback source not found" }, { status: 404 });
     }
 
-    if (source.protocol !== "mp4") {
-      return Response.json(
-        {
-          error:
-            "Adaptive HLS/DASH sources require a segment-aware media gateway",
-        },
-        { status: 422 },
-      );
-    }
+    const hasProviderHeaders = source.headers && Object.keys(source.headers).length > 0;
 
-    const hasProviderHeaders =
-      source.headers && Object.keys(source.headers).length > 0;
-
-    if (!hasProviderHeaders && providerId !== "moviebox") {
+    if (!target && !hasProviderHeaders && providerId !== "moviebox") {
       return Response.redirect(assertSafeUrl(source.url).href, 307);
     }
 
@@ -202,6 +255,11 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
         upstreamHeaders.set("accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
       }
     }
+    const upstreamTarget = target ? assertSafeUrl(target) : assertSafeUrl(source.url);
+    if (target && upstreamTarget.hostname !== new URL(source.url).hostname) {
+      return Response.json({ error: "Playback target is not allowed" }, { status: 400 });
+    }
+
     const range = request.headers.get("range");
     const ifRange = request.headers.get("if-range");
 
@@ -209,7 +267,7 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
     if (range) upstreamHeaders.set("range", range);
     if (ifRange) upstreamHeaders.set("if-range", ifRange);
 
-    const upstream = await fetchSafeUpstream(source.url, {
+    const upstream = await fetchSafeUpstream(upstreamTarget.href, {
       method: headOnly ? "HEAD" : "GET",
       headers: upstreamHeaders,
       signal: request.signal,
@@ -231,6 +289,44 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
         hasProviderHeaders: Boolean(hasProviderHeaders),
       });
       return upstreamFailure(upstream.status);
+    }
+
+    if (
+      source.protocol !== "mp4" &&
+      isManifestContentType(upstream.headers.get("content-type"), upstreamTarget.href)
+    ) {
+      if (headOnly) {
+        return new Response(null, {
+          status: upstream.status,
+          headers: proxyResponseHeaders(upstream),
+        });
+      }
+
+      const manifest = await upstream.text();
+      const rewritten = rewriteManifest(
+        manifest,
+        upstreamTarget.href,
+        requestUrl.origin,
+        searchParams,
+      );
+      const headers = proxyResponseHeaders(upstream);
+      headers.set(
+        "content-type",
+        upstream.headers.get("content-type") ??
+          (source.protocol === "hls" ? "application/vnd.apple.mpegurl" : "application/dash+xml"),
+      );
+      headers.delete("content-length");
+      return new Response(rewritten, {
+        status: upstream.status,
+        headers,
+      });
+    }
+
+    if (source.protocol !== "mp4") {
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: proxyResponseHeaders(upstream),
+      });
     }
 
     if (!isVideoLikeContentType(upstream.headers.get("content-type"))) {

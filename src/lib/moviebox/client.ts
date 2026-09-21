@@ -1,9 +1,6 @@
 import "server-only";
 
-import type {
-  MovieBoxItem,
-  MovieBoxKind,
-} from "./types";
+import type { MovieBoxItem, MovieBoxKind } from "./types";
 
 const API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff";
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -31,9 +28,7 @@ const DEFAULT_HEADERS: Record<string, string> = {
 type JsonRecord = Record<string, unknown>;
 
 function asRecord(value: unknown): JsonRecord | null {
-  return typeof value === "object" && value !== null
-    ? (value as JsonRecord)
-    : null;
+  return typeof value === "object" && value !== null ? (value as JsonRecord) : null;
 }
 
 function asString(value: unknown): string | null {
@@ -41,22 +36,14 @@ function asString(value: unknown): string | null {
 }
 
 function asStringOrNumber(value: unknown): string | number | null {
-  return typeof value === "string" || typeof value === "number"
-    ? value
-    : null;
+  return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
-function nestedRecord(
-  record: JsonRecord | null,
-  key: string,
-): JsonRecord | null {
+function nestedRecord(record: JsonRecord | null, key: string): JsonRecord | null {
   return record ? asRecord(record[key]) : null;
 }
 
-function nestedString(
-  record: JsonRecord | null,
-  key: string,
-): string | null {
+function nestedString(record: JsonRecord | null, key: string): string | null {
   return record ? asString(record[key]) : null;
 }
 
@@ -127,21 +114,19 @@ export type MovieBoxRequestOptions = {
   method?: "GET" | "POST";
   body?: Record<string, unknown>;
   searchParams?: Record<string, string | number | undefined>;
+  headers?: Record<string, string>;
+  requireToken?: boolean;
 };
 
-function requestInit(
-  options: MovieBoxRequestOptions,
-  token: string,
-): RequestInit {
+function requestInit(options: MovieBoxRequestOptions, token: string): RequestInit {
   return {
     method: options.method ?? "GET",
     headers: {
       ...DEFAULT_HEADERS,
+      ...options.headers,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    ...(options.method === "POST" && options.body
-      ? { body: JSON.stringify(options.body) }
-      : {}),
+    ...(options.method === "POST" && options.body ? { body: JSON.stringify(options.body) } : {}),
     cache: "no-store",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   };
@@ -174,10 +159,7 @@ function delay(ms: number): Promise<void> {
 }
 
 function isTimeoutError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.name === "TimeoutError" || error.name === "AbortError")
-  );
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
 }
 
 async function requestWithRetry(
@@ -191,10 +173,7 @@ async function requestWithRetry(
     try {
       const response = await requestOnce(url, options, token);
 
-      if (
-        attempt + 1 < REQUEST_ATTEMPTS &&
-        retryableStatus(response.status)
-      ) {
+      if (attempt + 1 < REQUEST_ATTEMPTS && retryableStatus(response.status)) {
         await response.body?.cancel().catch(() => undefined);
         await delay(REQUEST_RETRY_DELAY_MS * (attempt + 1));
         continue;
@@ -219,9 +198,15 @@ export async function movieboxRequest<T = unknown>(
   path: string,
   options: MovieBoxRequestOptions = {},
 ): Promise<T> {
-  const url = new URL(
-    path.startsWith("http") ? path : `${API_BASE}${path}`,
-  );
+  const result = await movieboxRequestWithMeta<T>(path, options);
+  return result.data;
+}
+
+export async function movieboxRequestWithMeta<T = unknown>(
+  path: string,
+  options: MovieBoxRequestOptions = {},
+): Promise<{ data: T; status: number; authorizationUsed: boolean }> {
+  const url = new URL(path.startsWith("http") ? path : `${API_BASE}${path}`);
 
   for (const [key, value] of Object.entries(options.searchParams ?? {})) {
     if (value !== undefined) {
@@ -231,7 +216,7 @@ export async function movieboxRequest<T = unknown>(
 
   // Most catalog endpoints are public. Do not block every cold Vercel
   // invocation on an extra /home token request before making the real call.
-  let token = currentToken();
+  let token = options.requireToken ? await bootstrapToken() : currentToken();
   let response = await requestWithRetry(url, options, token);
 
   // Only pay the token bootstrap cost when the upstream explicitly requires it.
@@ -243,63 +228,45 @@ export async function movieboxRequest<T = unknown>(
   }
 
   if (!response.ok) {
-    throw new Error(
-      `MovieBox upstream error: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`MovieBox upstream error: ${response.status} ${response.statusText}`);
   }
 
-  return (await response.json()) as T;
+  return {
+    data: (await response.json()) as T,
+    status: response.status,
+    authorizationUsed: Boolean(token),
+  };
 }
 
-function normalizeKind(
-  value: unknown,
-  fallbackKind?: MovieBoxKind,
-): MovieBoxKind | undefined {
-  if (
-    value === "movie" ||
-    value === "series" ||
-    value === "animation" ||
-    value === "mixed"
-  ) {
+function normalizeKind(value: unknown, fallbackKind?: MovieBoxKind): MovieBoxKind | undefined {
+  if (value === "movie" || value === "series" || value === "animation" || value === "mixed") {
     return value;
   }
 
   return fallbackKind;
 }
 
-export function normalizeItem(
-  raw: unknown,
-  fallbackKind?: MovieBoxKind,
-): MovieBoxItem {
+export function normalizeItem(raw: unknown, fallbackKind?: MovieBoxKind): MovieBoxItem {
   const record = asRecord(raw);
   const cover = nestedRecord(record, "cover");
   const image = nestedRecord(record, "image");
   const releaseDate = nestedString(record, "releaseDate");
 
   return {
-    name:
-      nestedString(record, "title") ??
-      nestedString(record, "name") ??
-      "Untitled",
+    name: nestedString(record, "title") ?? nestedString(record, "name") ?? "Untitled",
     poster_url:
       nestedString(cover, "url") ??
       nestedString(record, "poster_url") ??
       nestedString(image, "url"),
-    slug:
-      nestedString(record, "detailPath") ??
-      nestedString(record, "slug"),
+    slug: nestedString(record, "detailPath") ?? nestedString(record, "slug"),
     subject_id:
       (record ? asStringOrNumber(record.subjectId) : null) ??
       (record ? asStringOrNumber(record.subject_id) : null),
-    badge:
-      nestedString(record, "corner") ??
-      nestedString(record, "badge"),
+    badge: nestedString(record, "corner") ?? nestedString(record, "badge"),
     rating:
       (record ? asStringOrNumber(record.imdbRatingValue) : null) ??
       (record ? asStringOrNumber(record.rating) : null),
-    year: releaseDate
-      ? releaseDate.slice(0, 4)
-      : nestedString(record, "year"),
+    year: releaseDate ? releaseDate.slice(0, 4) : nestedString(record, "year"),
     kind: normalizeKind(record?.kind, fallbackKind),
   };
 }

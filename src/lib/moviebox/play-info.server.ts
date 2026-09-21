@@ -30,18 +30,22 @@ function isDummyUrl(url: string): boolean {
 }
 
 function readCookie(record: JsonRecord): string | null {
-  for (const key of ["signCookie", "sign_cookie", "cookie"]) {
+  for (const key of ["signCookie", "sign_cookie", "cookie", "sign"]) {
     const value = asString(record[key]);
     if (value) return value;
   }
   return null;
 }
 
-function decodeUrlPrefix(cookie: string): string | null {
-  const match = cookie.match(/(?:^|[;,\s])urlprefix=([A-Za-z0-9+/_=-]+)/i);
-  if (!match?.[1]) return null;
+function readUrlPrefix(record: JsonRecord, cookie: string): string | null {
+  const explicit =
+    asString(record.urlPrefix) ?? asString(record.url_prefix) ?? asString(record.urlprefix);
+  const match = cookie.match(/(?:^|[;,\s])urlprefix\s*=\s*([^;,\s]+)/i);
+  const raw = explicit ?? match?.[1];
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
 
-  const encoded = match[1].replace(/-/g, "+").replace(/_/g, "/");
+  const encoded = raw.replace(/-/g, "+").replace(/_/g, "/");
   const padded = encoded + "=".repeat((4 - (encoded.length % 4)) % 4);
 
   try {
@@ -52,10 +56,7 @@ function decodeUrlPrefix(cookie: string): string | null {
   }
 }
 
-function manifestExtension(
-  declared: unknown,
-  base: string,
-): ".m3u8" | ".mpd" {
+function manifestExtension(declared: unknown, base: string): ".m3u8" | ".mpd" {
   const value = asString(declared)?.toLowerCase() ?? "";
   const lowerBase = base.toLowerCase();
 
@@ -101,19 +102,11 @@ export function detectPlaybackProtocol(
   const value = asString(declared)?.toLowerCase() ?? "";
   const lowerUrl = url.toLowerCase();
 
-  if (
-    value.includes("hls") ||
-    value.includes("m3u8") ||
-    lowerUrl.includes(".m3u8")
-  ) {
+  if (value.includes("hls") || value.includes("m3u8") || lowerUrl.includes(".m3u8")) {
     return "hls";
   }
 
-  if (
-    value.includes("dash") ||
-    value.includes("mpd") ||
-    lowerUrl.includes(".mpd")
-  ) {
+  if (value.includes("dash") || value.includes("mpd") || lowerUrl.includes(".mpd")) {
     return "dash";
   }
 
@@ -136,36 +129,21 @@ export function normalizePlaybackQuality(value: unknown): string | undefined {
   return raw.toUpperCase();
 }
 
-export function resolvePlayInfoUrl(
-  value: unknown,
-  declaredFormat?: unknown,
-): string | null {
+export function resolvePlayInfoUrl(value: unknown, declaredFormat?: unknown): string | null {
   const record = asRecord(value);
   if (!record) return null;
 
-  for (const key of [
-    "url",
-    "playUrl",
-    "play_url",
-    "streamUrl",
-    "stream_url",
-    "file",
-    "src",
-  ]) {
+  for (const key of ["url", "playUrl", "play_url", "streamUrl", "stream_url", "file", "src"]) {
     const url = asString(record[key]);
     if (url && !isDummyUrl(url)) return url;
   }
 
-  const cookie = readCookie(record);
-  if (!cookie) return null;
-
-  const base = decodeUrlPrefix(cookie);
+  const cookie = readCookie(record) ?? "";
+  const base = readUrlPrefix(record, cookie);
   return base ? buildManifestUrl(base, declaredFormat ?? record.format ?? record.type) : null;
 }
 
-export function extractPlayInfoHeaders(
-  value: unknown,
-): Record<string, string> | undefined {
+export function extractPlayInfoHeaders(value: unknown): Record<string, string> | undefined {
   const record = asRecord(value);
   if (!record) return undefined;
 

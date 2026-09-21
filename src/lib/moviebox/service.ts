@@ -1,11 +1,8 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
-import { movieboxRequest, normalizeItem } from "./client";
-import {
-  extractPlayInfoHeaders,
-  resolvePlayInfoUrl,
-} from "./play-info.server";
+import { movieboxRequest, movieboxRequestWithMeta, normalizeItem } from "./client";
+import { extractPlayInfoHeaders, resolvePlayInfoUrl } from "./play-info.server";
 import type {
   MovieBoxCaption,
   MovieBoxCaptionResponse,
@@ -19,7 +16,6 @@ import type {
   MovieBoxStreamSource,
 } from "./types";
 
-const PLAYER_TIMEOUT_MS = 6_500;
 const METADATA_REVALIDATE_SECONDS = 900;
 const PLAYER_DOMAIN_TTL_MS = 5 * 60_000;
 const PLAYER_DOMAIN_FALLBACK = "https://mzfi.me";
@@ -104,9 +100,7 @@ type PlayerData = {
 };
 
 function asRecord(value: unknown): JsonRecord | null {
-  return typeof value === "object" && value !== null
-    ? (value as JsonRecord)
-    : null;
+  return typeof value === "object" && value !== null ? (value as JsonRecord) : null;
 }
 
 function asArray(value: unknown): unknown[] {
@@ -118,9 +112,7 @@ function asString(value: unknown): string | null {
 }
 
 function asStringOrNumber(value: unknown): string | number | null {
-  return typeof value === "string" || typeof value === "number"
-    ? value
-    : null;
+  return typeof value === "string" || typeof value === "number" ? value : null;
 }
 
 function asFiniteNumber(value: unknown): number | null {
@@ -128,10 +120,7 @@ function asFiniteNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function nestedRecord(
-  record: JsonRecord | null,
-  key: string,
-): JsonRecord | null {
+function nestedRecord(record: JsonRecord | null, key: string): JsonRecord | null {
   return record ? asRecord(record[key]) : null;
 }
 
@@ -140,10 +129,7 @@ function dataRecord(value: unknown): JsonRecord {
   return asRecord(root?.data) ?? {};
 }
 
-function firstArray(
-  record: JsonRecord,
-  keys: readonly string[],
-): unknown[] {
+function firstArray(record: JsonRecord, keys: readonly string[]): unknown[] {
   for (const key of keys) {
     const value = record[key];
     if (Array.isArray(value)) return value;
@@ -151,16 +137,9 @@ function firstArray(
   return [];
 }
 
-function responseTotal(
-  inner: JsonRecord,
-  fallback: number,
-): number {
+function responseTotal(inner: JsonRecord, fallback: number): number {
   const pager = nestedRecord(inner, "pager");
-  return (
-    asFiniteNumber(pager?.totalCount) ??
-    asFiniteNumber(inner.total) ??
-    fallback
-  );
+  return asFiniteNumber(pager?.totalCount) ?? asFiniteNumber(inner.total) ?? fallback;
 }
 
 function normalizeBannerItem(value: unknown): MovieBoxItem | null {
@@ -176,12 +155,8 @@ function normalizeBannerItem(value: unknown): MovieBoxItem | null {
 
   return {
     name: title ?? asString(subject?.title) ?? "Untitled",
-    poster_url:
-      asString(image?.url) ??
-      asString(cover?.url),
-    slug:
-      asString(item.detailPath) ??
-      asString(subject?.detailPath),
+    poster_url: asString(image?.url) ?? asString(cover?.url),
+    slug: asString(item.detailPath) ?? asString(subject?.detailPath),
     subject_id: asStringOrNumber(subject?.subjectId),
     badge: asString(subject?.corner),
     kind: "mixed",
@@ -229,9 +204,7 @@ async function loadHome(): Promise<MovieBoxHomeResponse> {
 
     if (!kind) continue;
 
-    const items = asArray(operation.subjects).map((subject) =>
-      normalizeItem(subject, kind),
-    );
+    const items = asArray(operation.subjects).map((subject) => normalizeItem(subject, kind));
 
     if (items.length) {
       sections.push({
@@ -314,12 +287,9 @@ async function loadCategory(
 
   const inner = dataRecord(payload);
   const rawItems = firstArray(inner, ["items", "subjects"]);
-  const fallbackKind: MovieBoxKind =
-    tabId === 2 ? "movie" : tabId === 5 ? "series" : "animation";
+  const fallbackKind: MovieBoxKind = tabId === 2 ? "movie" : tabId === 5 ? "series" : "animation";
 
-  const items = rawItems.map((subject) =>
-    normalizeItem(subject, fallbackKind),
-  );
+  const items = rawItems.map((subject) => normalizeItem(subject, fallbackKind));
 
   return {
     page,
@@ -429,9 +399,7 @@ export async function getAnimation(
   return safeCategory(8, page, perPage, sort, filters);
 }
 
-async function loadSearchSuggestions(
-  query: string,
-): Promise<SearchSuggestion[]> {
+async function loadSearchSuggestions(query: string): Promise<SearchSuggestion[]> {
   const payload = await movieboxRequest("/subject/search-suggest", {
     method: "POST",
     body: {
@@ -449,26 +417,15 @@ async function loadSearchSuggestions(
       const subject = nestedRecord(item, "subject");
 
       return {
-        title:
-          asString(subject?.title) ??
-          asString(item.word) ??
-          asString(item.title) ??
-          "",
-        slug:
-          asString(subject?.detailPath) ??
-          asString(item.detailPath),
-        subject_id:
-          asStringOrNumber(subject?.subjectId) ??
-          asStringOrNumber(item.subjectId),
+        title: asString(subject?.title) ?? asString(item.word) ?? asString(item.title) ?? "",
+        slug: asString(subject?.detailPath) ?? asString(item.detailPath),
+        subject_id: asStringOrNumber(subject?.subjectId) ?? asStringOrNumber(item.subjectId),
       };
     })
     .filter((item) => Boolean(item.title));
 }
 
-async function loadSearch(
-  query: string,
-  page: number,
-): Promise<SearchResponse> {
+async function loadSearch(query: string, page: number): Promise<SearchResponse> {
   try {
     const payload = await movieboxRequest("/subject/search", {
       method: "POST",
@@ -522,16 +479,11 @@ async function loadSearch(
   }
 }
 
-const loadCachedSearch = unstable_cache(
-  loadSearch,
-  ["moviebox-search-v3"],
-  { revalidate: SEARCH_REVALIDATE_SECONDS },
-);
+const loadCachedSearch = unstable_cache(loadSearch, ["moviebox-search-v3"], {
+  revalidate: SEARCH_REVALIDATE_SECONDS,
+});
 
-export async function search(
-  query: string,
-  page = 1,
-): Promise<SearchResponse> {
+export async function search(query: string, page = 1): Promise<SearchResponse> {
   return loadCachedSearch(query.trim(), page);
 }
 
@@ -600,9 +552,17 @@ async function getPlayerDomain(): Promise<string> {
         value: domain,
         expiresAt: Date.now() + PLAYER_DOMAIN_TTL_MS,
       };
+      console.info("[moviebox.player] selected domain", {
+        domain: new URL(domain).hostname,
+        source: root?.data ? "api" : "fallback",
+      });
       return domain;
     } catch (error: unknown) {
       console.warn("[moviebox] player domain lookup failed; using last known domain", error);
+      console.info("[moviebox.player] selected domain", {
+        domain: new URL(cachedPlayerDomain?.value ?? PLAYER_DOMAIN_FALLBACK).hostname,
+        source: cachedPlayerDomain ? "cached" : "fallback",
+      });
       return cachedPlayerDomain?.value ?? PLAYER_DOMAIN_FALLBACK;
     }
   })().finally(() => {
@@ -612,9 +572,7 @@ async function getPlayerDomain(): Promise<string> {
   return playerDomainInflight;
 }
 
-function normalizePlayerStream(
-  value: unknown,
-): UpstreamPlayerStream | null {
+function normalizePlayerStream(value: unknown): UpstreamPlayerStream | null {
   const record = asRecord(value);
   if (!record) return null;
 
@@ -623,8 +581,7 @@ function normalizePlayerStream(
   return {
     id: asStringOrNumber(record.id) ?? undefined,
     url: url ?? undefined,
-    resolutions:
-      asStringOrNumber(record.resolutions) ?? undefined,
+    resolutions: asStringOrNumber(record.resolutions) ?? undefined,
     format: asString(record.format) ?? asString(record.type) ?? undefined,
     size: asStringOrNumber(record.size) ?? undefined,
     duration: asFiniteNumber(record.duration) ?? undefined,
@@ -656,9 +613,7 @@ function parsePlayerData(payload: unknown): PlayerData {
     hasResource: Boolean(data.hasResource),
     title: asString(data.title) ?? undefined,
     freeNum: asFiniteNumber(data.freeNum) ?? undefined,
-    maxResolution:
-      asFiniteNumber(nestedRecord(data, "playConfig")?.maxResolution) ??
-      undefined,
+    maxResolution: asFiniteNumber(nestedRecord(data, "playConfig")?.maxResolution) ?? undefined,
     limited: Boolean(data.limited),
   };
 }
@@ -695,22 +650,27 @@ async function fetchPlayerData(
     "&_ts=" +
     Date.now();
 
-  const response = await fetch(playUrl, {
+  const response = await movieboxRequestWithMeta<unknown>(playUrl, {
     headers: {
       ...PLAYER_HEADERS,
       Referer: playerReferer,
+      Origin: new URL(domain).origin,
     },
-    cache: "no-store",
-    signal: AbortSignal.timeout(PLAYER_TIMEOUT_MS),
+    requireToken: true,
   });
 
-  if (!response.ok) {
-    throw new Error(
-      `Stream upstream error: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const parsed = parsePlayerData(await response.json());
+  const parsed = parsePlayerData(response.data);
+  console.info("[moviebox.player] upstream response", {
+    domain: new URL(domain).hostname,
+    status: response.status,
+    hasResource: parsed.hasResource,
+    streams: parsed.streams.length,
+    hls: parsed.hls.length,
+    dash: parsed.dash.length,
+    authorizationUsed: response.authorizationUsed,
+    season: se,
+    episode: ep,
+  });
   const mediaHeaders = {
     Referer: playerReferer,
     Origin: new URL(domain).origin,
@@ -738,25 +698,20 @@ function normalizeStreamData(
   ep: number,
 ): MovieBoxStreamResponse {
   const sources: MovieBoxStreamSource[] = data.streams
-    .filter(
-      (stream): stream is UpstreamPlayerStream & { url: string } => {
-        if (!stream.url) return false;
+    .filter((stream): stream is UpstreamPlayerStream & { url: string } => {
+      if (!stream.url) return false;
 
-        const resolution = asFiniteNumber(stream.resolutions);
-        return !(
-          data.maxResolution &&
-          data.maxResolution > 0 &&
-          resolution &&
-          resolution > data.maxResolution
-        );
-      },
-    )
+      const resolution = asFiniteNumber(stream.resolutions);
+      return !(
+        data.maxResolution &&
+        data.maxResolution > 0 &&
+        resolution &&
+        resolution > data.maxResolution
+      );
+    })
     .map((stream) => ({
       id: stream.id,
-      quality:
-        stream.resolutions !== undefined
-          ? `${String(stream.resolutions)}p`
-          : undefined,
+      quality: stream.resolutions !== undefined ? `${String(stream.resolutions)}p` : undefined,
       url: stream.url,
       type: (stream.format ?? "mp4").toLowerCase(),
       size: stream.size,
@@ -766,10 +721,7 @@ function normalizeStreamData(
     }));
 
   const hasResource =
-    data.hasResource ||
-    sources.length > 0 ||
-    data.hls.length > 0 ||
-    data.dash.length > 0;
+    data.hasResource || sources.length > 0 || data.hls.length > 0 || data.dash.length > 0;
 
   return {
     subject_id: subjectId,
@@ -799,13 +751,7 @@ export async function getStreamSources(
   let usedEp = Number.isFinite(ep) ? ep : 1;
 
   let normalized = normalizeStreamData(
-    await fetchPlayerData(
-      domain,
-      subjectId,
-      detailPath,
-      usedSe,
-      usedEp,
-    ),
+    await fetchPlayerData(domain, subjectId, detailPath, usedSe, usedEp),
     subjectId,
     usedSe,
     usedEp,
@@ -813,13 +759,7 @@ export async function getStreamSources(
 
   if (!normalized.has_resource && usedSe !== 0) {
     const fallbackNormalized = normalizeStreamData(
-      await fetchPlayerData(
-        domain,
-        subjectId,
-        detailPath,
-        0,
-        1,
-      ),
+      await fetchPlayerData(domain, subjectId, detailPath, 0, 1),
       subjectId,
       0,
       1,
@@ -857,28 +797,17 @@ export async function getCaptions(
   let usedSe = se;
   let usedEp = ep;
 
-  let playData = await fetchPlayerData(
-    domain,
-    subjectId,
-    detailPath,
-    usedSe,
-    usedEp,
-  );
+  let playData = await fetchPlayerData(domain, subjectId, detailPath, usedSe, usedEp);
 
   if (
     playData.streams.length === 0 &&
+    playData.hls.length === 0 &&
     playData.dash.length === 0 &&
     usedSe !== 0
   ) {
-    const fallback = await fetchPlayerData(
-      domain,
-      subjectId,
-      detailPath,
-      0,
-      1,
-    );
+    const fallback = await fetchPlayerData(domain, subjectId, detailPath, 0, 1);
 
-    if (fallback.streams.length || fallback.dash.length) {
+    if (fallback.streams.length || fallback.hls.length || fallback.dash.length) {
       playData = fallback;
       usedSe = 0;
       usedEp = 1;
@@ -887,8 +816,7 @@ export async function getCaptions(
 
   const first = playData.streams[0] ?? playData.dash[0];
   const streamId = first?.id;
-  const streamFormat =
-    first?.format ?? (playData.streams.length ? "MP4" : "DASH");
+  const streamFormat = first?.format ?? (playData.streams.length ? "MP4" : "DASH");
 
   if (streamId === undefined) {
     return {

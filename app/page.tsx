@@ -4,7 +4,6 @@ import { headers } from "next/headers";
 import { ChannelRow } from "@/components/channel-row";
 import { HotNow } from "@/components/hot-now";
 import { RecentRow } from "@/components/recent-row";
-import { getBangladeshPrivatePreviews } from "@/lib/iptv/private-channels";
 import { getHomeData } from "@/lib/iptv/provider/iptv-org";
 import { trustedViewerCountry } from "@/lib/viewer-location";
 import type { HomeData } from "@/lib/iptv/types";
@@ -17,7 +16,6 @@ const getCachedHomeData = unstable_cache(getHomeData, ["pinflix-home-data-v2"], 
 
 export default async function HomePage() {
   const country = trustedViewerCountry(await headers());
-  const localChannels = country === "BD" ? getBangladeshPrivatePreviews() : [];
 
   const data: HomeData = await getCachedHomeData().catch((error: unknown) => {
     console.error("Unable to load the Pinflix home catalog", error);
@@ -34,7 +32,8 @@ export default async function HomePage() {
           </div>
           {data.total > 0 ? (
             <p className="hidden text-xs text-subtle sm:block">
-              {data.total.toLocaleString()} channels · {data.countryCount.toLocaleString()} countries
+              {data.total.toLocaleString()} channels · {data.countryCount.toLocaleString()}{" "}
+              countries
             </p>
           ) : null}
         </div>
@@ -56,22 +55,14 @@ export default async function HomePage() {
 
         <RecentRow />
 
-        {localChannels.length > 0 ? (
-          <ChannelRow
-            category={{
-              id: "bangladesh-local",
-              name: "Bangladesh Local",
-              description: "Local channels available through your Bangladesh connection.",
-              count: localChannels.length,
-            }}
-            channels={localChannels}
-            showAll={false}
-          />
-        ) : null}
-
         {data.featured.length > 0 ? (
           <ChannelRow
-            category={{ id: "live", name: "Live Now", description: "", count: data.featured.length }}
+            category={{
+              id: "live",
+              name: "Live Now",
+              description: "",
+              count: data.featured.length,
+            }}
             channels={data.featured}
             showAll={false}
           />
