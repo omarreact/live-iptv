@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { AdaptivePlayer } from "@/components/media/adaptive-player";
-import type { MovieBoxDetailView } from "@/lib/moviebox/types";
+import type { MediaDetail } from "@/types/catalog";
 import { cn } from "@/lib/utils";
 import type { BrowserPlaybackResult } from "@/types/media";
 
@@ -21,19 +21,22 @@ export function EntertainmentDetailPlayer({
   detail,
   closeHref,
 }: {
-  detail: MovieBoxDetailView;
+  detail: MediaDetail;
   closeHref: string;
 }) {
-  const initialSeason = detail.seasons[0]?.se ?? 1;
+  const initialSeason =
+    detail.playback?.defaultSeason ?? detail.seasons[0]?.number ?? 1;
   const [season, setSeason] = useState(initialSeason);
-  const [episode, setEpisode] = useState(1);
+  const [episode, setEpisode] = useState(
+    detail.playback?.defaultEpisode ?? 1,
+  );
   const [playback, setPlayback] = useState<BrowserPlaybackResult | null>(null);
   const [loadingStream, setLoadingStream] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const activeSeason = detail.seasons.find((entry) => entry.se === season);
-  const episodeCount = Math.max(1, activeSeason?.maxEp ?? 1);
-  const canResolve = Boolean(detail.subjectId && detail.detailPath);
+  const activeSeason = detail.seasons.find((entry) => entry.number === season);
+  const episodeCount = Math.max(1, activeSeason?.episodeCount ?? 1);
+  const canResolve = Boolean(detail.playback);
   const hasPlayableSource = Boolean(playback?.sources.length);
 
   function resetPlayback(): void {
@@ -53,7 +56,7 @@ export function EntertainmentDetailPlayer({
   }
 
   async function play(): Promise<void> {
-    if (!detail.subjectId || !detail.detailPath) {
+    if (!detail.playback) {
       setError("This title does not currently expose a playable resource.");
       return;
     }
@@ -63,12 +66,12 @@ export function EntertainmentDetailPlayer({
 
     try {
       const params = new URLSearchParams({
-        provider: "moviebox",
-        id: String(detail.subjectId),
-        slug: detail.detailPath,
+        provider: detail.playback.provider,
+        id: detail.playback.id,
         season: String(season),
         episode: String(episode),
       });
+      if (detail.playback.slug) params.set("slug", detail.playback.slug);
 
       const response = await fetch(`/api/playback/resolve?${params.toString()}`, {
         cache: "no-store",
@@ -130,7 +133,7 @@ export function EntertainmentDetailPlayer({
             {hasPlayableSource && playback ? (
               <div className="animate-in fade-in duration-300">
                 <AdaptivePlayer
-                  key={`${detail.subjectId}-${season}-${episode}`}
+                  key={`${detail.id}-${season}-${episode}`}
                   result={playback}
                   poster={detail.poster ?? undefined}
                   autoPlay
@@ -193,9 +196,9 @@ export function EntertainmentDetailPlayer({
                   <Metadata detail={detail} />
                 </div>
 
-                {detail.description ? (
+                {detail.overview ? (
                   <p className="mt-4 max-w-3xl text-sm leading-6 text-white/55 sm:text-[15px] sm:leading-7">
-                    {detail.description}
+                    {detail.overview}
                   </p>
                 ) : null}
 
@@ -208,16 +211,16 @@ export function EntertainmentDetailPlayer({
                       {detail.seasons.map((entry) => (
                         <button
                           type="button"
-                          key={entry.se}
-                          onClick={() => selectSeason(entry.se)}
+                          key={entry.number}
+                          onClick={() => selectSeason(entry.number)}
                           className={cn(
                             "shrink-0 rounded-full border px-3.5 py-2 text-xs font-bold transition",
-                            entry.se === season
+                            entry.number === season
                               ? "border-white bg-white text-black shadow-lg"
                               : "border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white",
                           )}
                         >
-                          {entry.se === 0 ? "Movie" : `Season ${entry.se}`}
+                          {entry.number === 0 ? "Movie" : `Season ${entry.number}`}
                         </button>
                       ))}
                     </div>
@@ -339,7 +342,7 @@ export function EntertainmentDetailPlayer({
   );
 }
 
-function Metadata({ detail }: { detail: MovieBoxDetailView }) {
+function Metadata({ detail }: { detail: MediaDetail }) {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-white/45 sm:text-sm">
       {detail.year ? <span>{detail.year}</span> : null}
@@ -354,10 +357,10 @@ function Metadata({ detail }: { detail: MovieBoxDetailView }) {
         </>
       ) : null}
 
-      {detail.genre ? (
+      {detail.genres.length ? (
         <>
           <span className="text-white/20">•</span>
-          <span className="line-clamp-1">{detail.genre}</span>
+          <span className="line-clamp-1">{detail.genres.join(" · ")}</span>
         </>
       ) : null}
     </div>
