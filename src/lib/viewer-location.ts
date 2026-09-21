@@ -45,6 +45,11 @@ export function resolveViewerLocation(
   };
 }
 
+export function trustedViewerCountry(headers: HeaderReader): string {
+  const value = clean(headers.get("x-vercel-ip-country"))?.toUpperCase() ?? "";
+  return /^[A-Z]{2}$/.test(value) ? value : "ZZ";
+}
+
 function requestIp(headers: HeaderReader): string | null {
   const forwarded = clean(headers.get("x-forwarded-for"));
   const candidate = forwarded?.split(",")[0]?.trim() ?? clean(headers.get("x-real-ip"));

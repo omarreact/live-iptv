@@ -5,7 +5,7 @@ import { getPrivateChannelById } from "@/lib/iptv/private-channels";
 import { isPrivateChannelId } from "@/lib/iptv/private-locator";
 import { getChannelById } from "@/lib/iptv/provider/iptv-org";
 import { getSmartRelatedChannels } from "@/lib/iptv/related";
-import { resolveViewerLocationWithIpFallback } from "@/lib/viewer-location";
+import { trustedViewerCountry } from "@/lib/viewer-location";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +13,14 @@ export default async function WatchPage({ params }: { params: Promise<{ channelI
   const { channelId } = await params;
 
   if (isPrivateChannelId(channelId)) {
-    const location = await resolveViewerLocationWithIpFallback(await headers());
-    if (location.country !== "BD") notFound();
+    const country = trustedViewerCountry(await headers());
+    if (country !== "BD") notFound();
 
     const channel = getPrivateChannelById(channelId);
     if (!channel) notFound();
 
     const related = await getSmartRelatedChannels(channel, {
-      viewerCountry: location.country,
+      viewerCountry: country,
       limit: 16,
     });
 

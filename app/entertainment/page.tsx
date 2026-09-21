@@ -116,9 +116,9 @@ export default async function EntertainmentPage({
 }) {
   const params = await searchParams;
   const view = parseView(first(params.view));
-  const query = first(params.q).trim();
+  const query = first(params.q).trim().slice(0, 120);
   const page = parsePage(first(params.page));
-  const detailSlug = first(params.detail).trim();
+  const detailSlug = first(params.detail).trim().slice(0, 512);
 
   const context = { view, query, page };
 

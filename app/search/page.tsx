@@ -20,7 +20,7 @@ export default async function SearchPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  const query = first(params.q).trim();
+  const query = first(params.q).trim().slice(0, 120);
 
   let results: ChannelPreview[] = [];
   let failed = false;

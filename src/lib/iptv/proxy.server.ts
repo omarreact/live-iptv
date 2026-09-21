@@ -168,10 +168,13 @@ function passthroughHeaders(
     upstream.headers.get("content-type") || fallbackType || "application/octet-stream",
   );
   out.set("cache-control", "no-store");
-  out.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, X-Pinflix-Upstream-Status, X-Pinflix-Upstream-Host");
+  out.set(
+    "access-control-expose-headers",
+    "Content-Length, Content-Range, Accept-Ranges, X-Pinflix-Upstream-Status",
+  );
   out.set("x-accel-buffering", "no");
   out.set("x-pinflix-upstream-status", String(upstream.status));
-  if (finalUrl) out.set("x-pinflix-upstream-host", finalUrl.hostname);
+  void finalUrl;
   for (const name of ["content-length", "content-range", "accept-ranges"]) {
     const value = upstream.headers.get(name);
     if (value) out.set(name, value);
@@ -255,7 +258,6 @@ export async function proxyStream(request: Request): Promise<Response> {
       status: 502,
       headers: {
         "cache-control": "no-store",
-        "x-pinflix-upstream-host": target.hostname,
       },
     });
   }

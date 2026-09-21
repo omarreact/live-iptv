@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const channelId = new URL(request.url).searchParams.get("channel")?.trim();
-  if (!channelId) return Response.json({ error: "Missing channel" }, { status: 400 });
+  if (!channelId || channelId.length > 256) {
+    return Response.json({ error: "Invalid channel" }, { status: 400 });
+  }
 
   const channel = await getChannelById(channelId);
   if (!channel) return Response.json({ error: "Channel not found" }, { status: 404 });

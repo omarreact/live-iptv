@@ -2,15 +2,15 @@ import {
   getBangladeshPrivatePreviews,
   getPrivateChannelsByCategory,
 } from "@/lib/iptv/private-channels";
-import { resolveViewerLocationWithIpFallback } from "@/lib/viewer-location";
+import { trustedViewerCountry } from "@/lib/viewer-location";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const location = await resolveViewerLocationWithIpFallback(request.headers);
+  const country = trustedViewerCountry(request.headers);
 
-  if (location.country !== "BD") {
+  if (country !== "BD") {
     return Response.json([], {
       headers: {
         "cache-control": "private, max-age=60",
