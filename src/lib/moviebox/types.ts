@@ -23,6 +23,13 @@ export type MovieBoxHomeResponse = {
   error?: string;
 };
 
+export type MovieBoxFilters = {
+  genre?: string;
+  country?: string;
+  year?: string;
+  language?: string;
+};
+
 export type MovieBoxCategoryResponse = {
   page: number;
   per_page: number;
@@ -30,34 +37,45 @@ export type MovieBoxCategoryResponse = {
   items: MovieBoxItem[];
 };
 
-export type MovieBoxDetail = {
-  title: string;
-  description?: string | null;
-  poster_url?: string | null;
-  backdrop_url?: string | null;
-  year?: string | null;
-  rating?: number | string | null;
-  genres?: string[];
-  country?: string | null;
-  runtime?: string | null;
-  subject_id?: string | number | null;
-  slug?: string | null;
-  kind?: MovieBoxKind;
-  seasons?: Array<{
-    season: number;
-    episodes: Array<{ episode: number; title?: string; subject_id?: string | number }>;
-  }>;
-};
-
 export type MovieBoxStreamSource = {
+  id?: string | number;
   quality?: string;
   url: string;
   type?: "mp4" | "hls" | "dash" | string;
+  size?: string | number;
+  duration?: number;
+  codec?: string;
   headers?: Record<string, string>;
+};
+
+export type MovieBoxCaption = {
+  language?: string;
+  label?: string;
+  url?: string;
+  file?: string;
+  src?: string;
+  [key: string]: unknown;
 };
 
 export type MovieBoxStreamResponse = {
   sources: MovieBoxStreamSource[];
-  subtitles?: Array<{ language: string; url: string; label?: string }>;
+  subtitles?: MovieBoxCaption[];
   title?: string;
+  subject_id?: string | number;
+  se?: number;
+  ep?: number;
+  has_resource?: boolean;
+  hls?: Array<Record<string, unknown>>;
+  dash?: Array<Record<string, unknown>>;
+  free_episodes?: number;
+  limited?: boolean;
+  note?: string | null;
+};
+
+export type MovieBoxCaptionResponse = {
+  subject_id: string | number;
+  se: number;
+  ep: number;
+  count: number;
+  captions: MovieBoxCaption[];
 };
