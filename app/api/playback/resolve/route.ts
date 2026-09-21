@@ -1,5 +1,6 @@
 import { assertSafeUrl } from "@/lib/iptv/proxy.server";
 import { getPlaybackProvider } from "@/lib/providers/registry.server";
+import { resolveMovieBoxBridge } from "@/lib/moviebox/bridge.server";
 import type {
   BrowserPlaybackResult,
   PlaybackResult,
@@ -63,6 +64,31 @@ function browserSource(
     protocol: source.protocol,
     quality: source.quality,
     mimeType: source.mimeType,
+  };
+}
+
+
+function toBridgeBrowserResult(
+  input: ResolvePlaybackInput,
+  result: PlaybackResult,
+  sources: PlaybackSource[],
+): BrowserPlaybackResult {
+  return {
+    title: result.title,
+    sources: sources.flatMap((source) => {
+      try {
+        return [browserSource(source, assertSafeUrl(source.url).href)];
+      } catch {
+        return [];
+      }
+    }),
+    subtitles: result.subtitles.map((subtitle, subtitleIndex) => ({
+      ...subtitle,
+      url: subtitleHref("moviebox", input, subtitleIndex),
+    })),
+    warnings: [
+      "Playback is using the configured Pinflix media bridge.",
+    ],
   };
 }
 
@@ -156,12 +182,25 @@ export async function GET(request: Request) {
     const provider = getPlaybackProvider(providerId);
     const result = await provider.resolve(input);
 
-    return Response.json(toBrowserResult(providerId, input, result), {
+    let browserResult = toBrowserResult(providerId, input, result);
+
+    if (providerId === "moviebox") {
+      const bridgedSources = await resolveMovieBoxBridge(input);
+      if (bridgedSources?.length) {
+        browserResult = toBridgeBrowserResult(
+          input,
+          result,
+          bridgedSources,
+        );
+      }
+    }
+
+    return Response.json(browserResult, {
       headers: {
         "cache-control": "private, no-store, no-cache, max-age=0, must-revalidate",
         pragma: "no-cache",
         expires: "0",
-        "x-pinflix-playback-revision": "moviebox-proxy-v2",
+        "x-pinflix-playback-revision": "moviebox-bridge-v3",
       },
     });
   } catch (error: unknown) {
