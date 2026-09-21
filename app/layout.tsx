@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import "../src/styles.css";
 import { AppShell } from "@/components/app-shell";
 
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className="bg-bg text-fg antialiased">
         <AppShell>{children}</AppShell>
+        <Analytics />
       </body>
     </html>
   );
