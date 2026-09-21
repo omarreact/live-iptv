@@ -19,8 +19,12 @@ import {
   type DashPlayer,
 } from "./dash-loader.client";
 import {
+  readAudioPreference,
   readQualityPreference,
+  readSubtitlePreference,
+  writeAudioPreference,
   writeQualityPreference,
+  writeSubtitlePreference,
 } from "./player-preferences";
 import {
   PlayerStateOverlay,
@@ -89,6 +93,7 @@ export function AdaptivePlayer({
   const resumePlayingRef = useRef(false);
   const hlsNetworkRetriesRef = useRef(0);
   const hlsMediaRetriesRef = useRef(0);
+  const failedSourceIndexesRef = useRef<Set<number>>(new Set());
 
   const [sourceIndex, setSourceIndex] = useState(0);
   const [adaptiveQualities, setAdaptiveQualities] = useState<QualityOption[]>([]);
@@ -113,12 +118,37 @@ export function AdaptivePlayer({
     [adaptiveQualities, currentHeight],
   );
 
-  const setFailure = useCallback((message: string) => {
-    setError(message);
-    setStatus("error");
-  }, []);
+  const failCurrentSource = useCallback(
+    (message: string) => {
+      const video = videoRef.current;
+
+      if (video) {
+        resumeAtRef.current = video.currentTime || 0;
+        resumePlayingRef.current = !video.paused;
+      }
+
+      const failed = failedSourceIndexesRef.current;
+      failed.add(sourceIndex);
+
+      const nextIndex = result.sources.findIndex(
+        (_candidate, index) => index !== sourceIndex && !failed.has(index),
+      );
+
+      if (nextIndex >= 0) {
+        setError(null);
+        setStatus("loading");
+        setSourceIndex(nextIndex);
+        return;
+      }
+
+      setError(message);
+      setStatus("error");
+    },
+    [result.sources, sourceIndex],
+  );
 
   const retry = useCallback(() => {
+    failedSourceIndexesRef.current.clear();
     setError(null);
     setStatus("loading");
     setRetryNonce((value) => value + 1);
@@ -142,8 +172,47 @@ export function AdaptivePlayer({
   });
 
   useEffect(() => {
+    failedSourceIndexesRef.current.clear();
+    setSourceIndex(0);
+    setError(null);
+  }, [result]);
+
+  useEffect(() => {
     if (sourceIndex >= result.sources.length) setSourceIndex(0);
   }, [result.sources.length, sourceIndex]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const preference = readAudioPreference();
+    video.volume = preference.volume;
+    video.muted = preference.muted;
+
+    const persistAudio = () =>
+      writeAudioPreference({
+        volume: video.volume,
+        muted: video.muted,
+      });
+
+    video.addEventListener("volumechange", persistAudio);
+    return () => video.removeEventListener("volumechange", persistAudio);
+  }, []);
+
+  useEffect(() => {
+    const preferredLanguage = readSubtitlePreference();
+
+    if (!preferredLanguage) {
+      setSubtitleIndex(-1);
+      return;
+    }
+
+    const preferredIndex = result.subtitles.findIndex(
+      (subtitle) =>
+        subtitle.language.toLowerCase() === preferredLanguage.toLowerCase(),
+    );
+    setSubtitleIndex(preferredIndex);
+  }, [result.subtitles]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -189,7 +258,7 @@ export function AdaptivePlayer({
     const onCanPlay = () =>
       setStatus((value) => (value === "playing" ? value : "ready"));
     const onPlaying = () => setStatus("playing");
-    const onError = () => setFailure(mediaErrorMessage(video));
+    const onError = () => failCurrentSource(mediaErrorMessage(video));
 
     video.addEventListener("loadedmetadata", restorePosition);
     video.addEventListener("loadstart", onLoadStart);
@@ -224,7 +293,7 @@ export function AdaptivePlayer({
 
         const Hls = module.default;
         if (!Hls.isSupported()) {
-          setFailure("HLS playback is not supported by this browser.");
+          failCurrentSource("HLS playback is not supported by this browser.");
           return;
         }
 
@@ -302,7 +371,7 @@ export function AdaptivePlayer({
             return;
           }
 
-          setFailure("Unable to recover this HLS stream.");
+          failCurrentSource("Unable to recover this HLS stream.");
         });
 
         hls.loadSource(source.url);
@@ -397,7 +466,7 @@ export function AdaptivePlayer({
       });
 
       player.on(dashjs.MediaPlayer.events.ERROR, () => {
-        setFailure("Unable to play this DASH stream.");
+        failCurrentSource("Unable to play this DASH stream.");
       });
 
       player.initialize(video, source.url, autoPlay || resumePlayingRef.current);
@@ -405,7 +474,7 @@ export function AdaptivePlayer({
 
     void startPlayback().catch((playbackError: unknown) => {
       console.error("[adaptive-player] initialization failed", playbackError);
-      setFailure("Unable to initialize playback.");
+      failCurrentSource("Unable to initialize playback.");
     });
 
     return () => {
@@ -424,7 +493,7 @@ export function AdaptivePlayer({
       dashRef.current?.reset();
       dashRef.current = null;
     };
-  }, [autoPlay, retryNonce, setFailure, source]);
+  }, [autoPlay, retryNonce, failCurrentSource, source]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -448,6 +517,8 @@ export function AdaptivePlayer({
     const nextIndex = Number(value);
     const video = videoRef.current;
 
+    failedSourceIndexesRef.current.clear();
+
     if (video) {
       resumeAtRef.current = video.currentTime || 0;
       resumePlayingRef.current = !video.paused;
@@ -459,6 +530,13 @@ export function AdaptivePlayer({
     }
 
     setSourceIndex(nextIndex);
+  }
+
+  function changeSubtitle(index: number): void {
+    setSubtitleIndex(index);
+    writeSubtitlePreference(
+      index >= 0 ? result.subtitles[index]?.language ?? null : null,
+    );
   }
 
   function changeAdaptiveQuality(value: string): void {
@@ -596,7 +674,7 @@ export function AdaptivePlayer({
         <SubtitleSelector
           subtitles={result.subtitles}
           value={subtitleIndex}
-          onChange={setSubtitleIndex}
+          onChange={changeSubtitle}
         />
 
         <div className="ml-auto flex items-center gap-1.5">
