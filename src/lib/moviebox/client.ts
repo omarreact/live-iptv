@@ -1,6 +1,12 @@
 import "server-only";
 
+import type {
+  MovieBoxItem,
+  MovieBoxKind,
+} from "./types";
+
 const API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff";
+const REQUEST_TIMEOUT_MS = 15_000;
 
 const DEFAULT_HEADERS: Record<string, string> = {
   "User-Agent":
@@ -19,70 +25,115 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "sec-fetch-site": "cross-site",
 };
 
-// Simple in-memory token cache (works well on Vercel for short-lived instances)
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord | null {
+  return typeof value === "object" && value !== null
+    ? (value as JsonRecord)
+    : null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function asStringOrNumber(value: unknown): string | number | null {
+  return typeof value === "string" || typeof value === "number"
+    ? value
+    : null;
+}
+
+function nestedRecord(
+  record: JsonRecord | null,
+  key: string,
+): JsonRecord | null {
+  return record ? asRecord(record[key]) : null;
+}
+
+function nestedString(
+  record: JsonRecord | null,
+  key: string,
+): string | null {
+  return record ? asString(record[key]) : null;
+}
+
+function readBearerToken(headerValue: string): string | null {
+  try {
+    const parsed = JSON.parse(headerValue) as unknown;
+    const record = asRecord(parsed);
+    return record ? asString(record.token) : null;
+  } catch {
+    return null;
+  }
+}
+
 let cachedToken: string | null = null;
 let tokenFetchedAt = 0;
-const TOKEN_TTL_MS = 25 * 60 * 1000; // 25 minutes
+const TOKEN_TTL_MS = 25 * 60 * 1000;
+
+function updateCachedToken(token: string | null): void {
+  if (!token) return;
+  cachedToken = token;
+  tokenFetchedAt = Date.now();
+}
 
 async function getBearerToken(): Promise<string> {
   const now = Date.now();
+
   if (cachedToken && now - tokenFetchedAt < TOKEN_TTL_MS) {
     return cachedToken;
   }
 
   try {
-    const resp = await fetch(`${API_BASE}/home?host=moviebox.ph`, {
+    const response = await fetch(`${API_BASE}/home?host=moviebox.ph`, {
       headers: DEFAULT_HEADERS,
-      next: { revalidate: 0 },
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
-    const xUser = resp.headers.get("x-user");
-    if (xUser) {
-      try {
-        const parsed = JSON.parse(xUser);
-        if (parsed?.token) {
-          cachedToken = parsed.token;
-          tokenFetchedAt = now;
-          return cachedToken!;
-        }
-      } catch {
-        // ignore parse error
+    const headerToken = response.headers.get("x-user");
+    if (headerToken) {
+      const token = readBearerToken(headerToken);
+      if (token) {
+        updateCachedToken(token);
+        return token;
       }
     }
 
-    // Fallback: try set-cookie
-    const setCookie = resp.headers.get("set-cookie") || "";
+    const setCookie = response.headers.get("set-cookie") ?? "";
     const match = setCookie.match(/token=([^;]+)/);
-    if (match?.[1]) {
-      cachedToken = match[1];
-      tokenFetchedAt = now;
-      return cachedToken;
+    const cookieToken = match?.[1] ?? null;
+
+    if (cookieToken) {
+      updateCachedToken(cookieToken);
+      return cookieToken;
     }
-  } catch (err) {
-    console.error("[moviebox] token acquisition failed", err);
+  } catch (error: unknown) {
+    console.error("[moviebox] token acquisition failed", error);
   }
 
-  return cachedToken || "";
+  return cachedToken ?? "";
 }
 
-export async function movieboxRequest<
-  T = any
->(
+export type MovieBoxRequestOptions = {
+  method?: "GET" | "POST";
+  body?: Record<string, unknown>;
+  searchParams?: Record<string, string | number | undefined>;
+};
+
+export async function movieboxRequest<T = unknown>(
   path: string,
-  options: {
-    method?: "GET" | "POST";
-    body?: Record<string, any>;
-    searchParams?: Record<string, string | number | undefined>;
-  } = {},
+  options: MovieBoxRequestOptions = {},
 ): Promise<T> {
   const token = await getBearerToken();
 
-  const url = new URL(path.startsWith("http") ? path : `${API_BASE}${path}`);
-  if (options.searchParams) {
-    for (const [key, value] of Object.entries(options.searchParams)) {
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, String(value));
-      }
+  const url = new URL(
+    path.startsWith("http") ? path : `${API_BASE}${path}`,
+  );
+
+  for (const [key, value] of Object.entries(options.searchParams ?? {})) {
+    if (value !== undefined) {
+      url.searchParams.set(key, String(value));
     }
   }
 
@@ -92,47 +143,81 @@ export async function movieboxRequest<
   };
 
   const init: RequestInit = {
-    method: options.method || "GET",
+    method: options.method ?? "GET",
     headers,
-    next: { revalidate: 0 },
+    cache: "no-store",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   };
 
   if (options.method === "POST" && options.body) {
     init.body = JSON.stringify(options.body);
   }
 
-  const resp = await fetch(url.toString(), init);
+  const response = await fetch(url, init);
 
-  // Refresh token if server sends a new one
-  const xUser = resp.headers.get("x-user");
-  if (xUser) {
-    try {
-      const parsed = JSON.parse(xUser);
-      if (parsed?.token) {
-        cachedToken = parsed.token;
-        tokenFetchedAt = Date.now();
-      }
-    } catch {
-      // ignore
-    }
+  const headerToken = response.headers.get("x-user");
+  if (headerToken) {
+    updateCachedToken(readBearerToken(headerToken));
   }
 
-  if (!resp.ok) {
-    throw new Error(`MovieBox upstream error: ${resp.status}`);
+  if (!response.ok) {
+    throw new Error(
+      `MovieBox upstream error: ${response.status} ${response.statusText}`,
+    );
   }
 
-  return resp.json() as Promise<T>;
+  return (await response.json()) as T;
 }
 
-export function normalizeItem(raw: any, fallbackKind?: string): import("./types").MovieBoxItem {
+function normalizeKind(
+  value: unknown,
+  fallbackKind?: MovieBoxKind,
+): MovieBoxKind | undefined {
+  if (
+    value === "movie" ||
+    value === "series" ||
+    value === "animation" ||
+    value === "mixed"
+  ) {
+    return value;
+  }
+
+  return fallbackKind;
+}
+
+export function normalizeItem(
+  raw: unknown,
+  fallbackKind?: MovieBoxKind,
+): MovieBoxItem {
+  const record = asRecord(raw);
+  const cover = nestedRecord(record, "cover");
+  const image = nestedRecord(record, "image");
+  const releaseDate = nestedString(record, "releaseDate");
+
   return {
-    name: raw.title || raw.name || "Untitled",
-    poster_url: raw.cover?.url || raw.poster_url || raw.image?.url || null,
-    slug: raw.detailPath || raw.slug || null,
-    subject_id: raw.subjectId || raw.subject_id || null,
-    badge: raw.corner || raw.badge || null,
-    rating: raw.imdbRatingValue || raw.rating || null,
-    year: raw.releaseDate ? String(raw.releaseDate).slice(0, 4) : raw.year || null,
-    kind: (raw.kind as any) || (fallbackKind as any) || undefined,
+    name:
+      nestedString(record, "title") ??
+      nestedString(record, "name") ??
+      "Untitled",
+    poster_url:
+      nestedString(cover, "url") ??
+      nestedString(record, "poster_url") ??
+      nestedString(image, "url"),
+    slug:
+      nestedString(record, "detailPath") ??
+      nestedString(record, "slug"),
+    subject_id:
+      (record ? asStringOrNumber(record.subjectId) : null) ??
+      (record ? asStringOrNumber(record.subject_id) : null),
+    badge:
+      nestedString(record, "corner") ??
+      nestedString(record, "badge"),
+    rating:
+      (record ? asStringOrNumber(record.imdbRatingValue) : null) ??
+      (record ? asStringOrNumber(record.rating) : null),
+    year: releaseDate
+      ? releaseDate.slice(0, 4)
+      : nestedString(record, "year"),
+    kind: normalizeKind(record?.kind, fallbackKind),
   };
 }

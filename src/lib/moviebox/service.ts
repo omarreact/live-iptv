@@ -1,15 +1,24 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { movieboxRequest, normalizeItem } from "./client";
 import type {
+  MovieBoxCaption,
   MovieBoxCaptionResponse,
   MovieBoxCategoryResponse,
   MovieBoxFilters,
   MovieBoxHomeResponse,
   MovieBoxItem,
+  MovieBoxKind,
   MovieBoxSection,
   MovieBoxStreamResponse,
+  MovieBoxStreamSource,
 } from "./types";
+
+const PLAYER_TIMEOUT_MS = 15_000;
+const METADATA_REVALIDATE_SECONDS = 300;
+const SEARCH_REVALIDATE_SECONDS = 120;
+const DETAIL_REVALIDATE_SECONDS = 600;
 
 const PLAYER_HEADERS: Record<string, string> = {
   "User-Agent":
@@ -28,114 +37,258 @@ const PLAYER_HEADERS: Record<string, string> = {
   "sec-fetch-site": "same-origin",
 };
 
-export async function getHome(): Promise<MovieBoxHomeResponse> {
-  try {
-    const data = await movieboxRequest<any>("/home", {
-      searchParams: { host: "moviebox.ph" },
-    });
+type JsonRecord = Record<string, unknown>;
 
-    const sections: MovieBoxSection[] = [];
+type SearchSuggestion = {
+  title: string;
+  slug: string | null;
+  subject_id: string | number | null;
+};
 
-    for (const op of data?.data?.operatingList || []) {
-      const opType = op?.type;
-      const title = op?.title || "Featured";
+type SearchResponse = {
+  query: string;
+  page: number;
+  items: MovieBoxItem[];
+  total: number;
+};
 
-      if (opType === "BANNER") {
-        const items: MovieBoxItem[] = (op?.banner?.items || [])
-          .filter(
-            (item: any) =>
-              item?.title && !String(item.title).includes("Communities"),
-          )
-          .map((item: any) => ({
-            name: item.title || item.subject?.title || "Untitled",
-            poster_url: item.image?.url || item.subject?.cover?.url || null,
-            slug: item.detailPath || item.subject?.detailPath || null,
-            subject_id: item.subject?.subjectId || null,
-            badge: item.subject?.corner || null,
-            kind: "mixed" as const,
-          }));
+type UpstreamPlayerStream = {
+  id?: string | number;
+  url?: string;
+  resolutions?: string | number;
+  format?: string;
+  size?: string | number;
+  duration?: number;
+  codecName?: string;
+};
 
-        if (items.length) {
-          sections.push({ section: "Banner", count: items.length, items });
-        }
-      } else if (
-        ["SUBJECTS_MOVIE", "SUBJECTS_TV", "SUBJECTS_ANIMATION"].includes(opType)
-      ) {
-        const kind =
-          opType === "SUBJECTS_MOVIE"
-            ? "movie"
-            : opType === "SUBJECTS_TV"
-              ? "series"
-              : "animation";
+type PlayerData = {
+  streams: UpstreamPlayerStream[];
+  hls: JsonRecord[];
+  dash: UpstreamPlayerStream[];
+  hasResource: boolean;
+  title?: string;
+  freeNum?: number;
+  limited: boolean;
+};
 
-        const items = (op?.subjects || []).map((sub: any) =>
-          normalizeItem(sub, kind),
-        );
+function asRecord(value: unknown): JsonRecord | null {
+  return typeof value === "object" && value !== null
+    ? (value as JsonRecord)
+    : null;
+}
 
-        if (items.length) {
-          sections.push({ section: title, count: items.length, items });
-        }
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function asStringOrNumber(value: unknown): string | number | null {
+  return typeof value === "string" || typeof value === "number"
+    ? value
+    : null;
+}
+
+function asFiniteNumber(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function nestedRecord(
+  record: JsonRecord | null,
+  key: string,
+): JsonRecord | null {
+  return record ? asRecord(record[key]) : null;
+}
+
+function dataRecord(value: unknown): JsonRecord {
+  const root = asRecord(value);
+  return asRecord(root?.data) ?? {};
+}
+
+function firstArray(
+  record: JsonRecord,
+  keys: readonly string[],
+): unknown[] {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+}
+
+function responseTotal(
+  inner: JsonRecord,
+  fallback: number,
+): number {
+  const pager = nestedRecord(inner, "pager");
+  return (
+    asFiniteNumber(pager?.totalCount) ??
+    asFiniteNumber(inner.total) ??
+    fallback
+  );
+}
+
+function normalizeBannerItem(value: unknown): MovieBoxItem | null {
+  const item = asRecord(value);
+  if (!item) return null;
+
+  const title = asString(item.title);
+  if (!title || title.includes("Communities")) return null;
+
+  const subject = nestedRecord(item, "subject");
+  const image = nestedRecord(item, "image");
+  const cover = nestedRecord(subject, "cover");
+
+  return {
+    name: title ?? asString(subject?.title) ?? "Untitled",
+    poster_url:
+      asString(image?.url) ??
+      asString(cover?.url),
+    slug:
+      asString(item.detailPath) ??
+      asString(subject?.detailPath),
+    subject_id: asStringOrNumber(subject?.subjectId),
+    badge: asString(subject?.corner),
+    kind: "mixed",
+  };
+}
+
+async function loadHome(): Promise<MovieBoxHomeResponse> {
+  const payload = await movieboxRequest("/home", {
+    searchParams: { host: "moviebox.ph" },
+  });
+
+  const data = dataRecord(payload);
+  const operatingList = asArray(data.operatingList);
+  const sections: MovieBoxSection[] = [];
+
+  for (const rawOperation of operatingList) {
+    const operation = asRecord(rawOperation);
+    if (!operation) continue;
+
+    const operationType = asString(operation.type);
+    const title = asString(operation.title) ?? "Featured";
+
+    if (operationType === "BANNER") {
+      const banner = nestedRecord(operation, "banner");
+      const items = asArray(banner?.items)
+        .map(normalizeBannerItem)
+        .filter((item): item is MovieBoxItem => item !== null);
+
+      if (items.length) {
+        sections.push({
+          section: "Banner",
+          count: items.length,
+          items,
+        });
       }
+
+      continue;
     }
 
-    return { status: "success", sections };
-  } catch (err) {
-    console.error("[moviebox] getHome failed", err);
+    let kind: MovieBoxKind | null = null;
+
+    if (operationType === "SUBJECTS_MOVIE") kind = "movie";
+    if (operationType === "SUBJECTS_TV") kind = "series";
+    if (operationType === "SUBJECTS_ANIMATION") kind = "animation";
+
+    if (!kind) continue;
+
+    const items = asArray(operation.subjects).map((subject) =>
+      normalizeItem(subject, kind),
+    );
+
+    if (items.length) {
+      sections.push({
+        section: title,
+        count: items.length,
+        items,
+      });
+    }
+  }
+
+  return {
+    status: "success",
+    sections,
+  };
+}
+
+const loadCachedHome = unstable_cache(
+  loadHome,
+  ["moviebox-home-v3"],
+  { revalidate: METADATA_REVALIDATE_SECONDS },
+);
+
+export async function getHome(): Promise<MovieBoxHomeResponse> {
+  try {
+    return await loadCachedHome();
+  } catch (error: unknown) {
+    console.error("[moviebox] getHome failed", error);
     return {
       status: "error",
       sections: [],
-      error: "Failed to load MovieBox home",
+      error: "Failed to load entertainment home",
     };
   }
 }
 
-async function getCategory(
+async function loadCategory(
   tabId: number,
-  page = 1,
-  perPage = 24,
-  sort = "RECOMMEND",
-  filters: MovieBoxFilters = {},
+  page: number,
+  perPage: number,
+  sort: string,
+  filters: MovieBoxFilters,
 ): Promise<MovieBoxCategoryResponse> {
-  const data = await movieboxRequest<any>("/subject/filter", {
+  const payload = await movieboxRequest("/subject/filter", {
     method: "POST",
     body: {
       tabId,
       filter: {
         sort,
-        genre: filters.genre || "ALL",
-        country: filters.country || "ALL",
-        year: filters.year || "ALL",
-        language: filters.language || "ALL",
+        genre: filters.genre ?? "ALL",
+        country: filters.country ?? "ALL",
+        year: filters.year ?? "ALL",
+        language: filters.language ?? "ALL",
       },
       page,
       perPage,
     },
   });
 
-  const inner = data?.data || {};
-  const rawItems = inner.items || inner.subjects || [];
-  const fallbackKind =
+  const inner = dataRecord(payload);
+  const rawItems = firstArray(inner, ["items", "subjects"]);
+  const fallbackKind: MovieBoxKind =
     tabId === 2 ? "movie" : tabId === 5 ? "series" : "animation";
-  const items = rawItems.map((sub: any) => normalizeItem(sub, fallbackKind));
 
-  const pager = inner.pager || {};
-  const total = pager.totalCount || inner.total || items.length;
+  const items = rawItems.map((subject) =>
+    normalizeItem(subject, fallbackKind),
+  );
 
   return {
     page,
     per_page: perPage,
-    total,
+    total: responseTotal(inner, items.length),
     items,
   };
 }
+
+const loadCachedCategory = unstable_cache(
+  loadCategory,
+  ["moviebox-category-v3"],
+  { revalidate: METADATA_REVALIDATE_SECONDS },
+);
 
 export async function getMovies(
   page = 1,
   sort = "RECOMMEND",
   filters: MovieBoxFilters = {},
   perPage = 24,
-) {
-  return getCategory(2, page, perPage, sort, filters);
+): Promise<MovieBoxCategoryResponse> {
+  return loadCachedCategory(2, page, perPage, sort, filters);
 }
 
 export async function getTvSeries(
@@ -143,8 +296,8 @@ export async function getTvSeries(
   sort = "RECOMMEND",
   filters: MovieBoxFilters = {},
   perPage = 24,
-) {
-  return getCategory(5, page, perPage, sort, filters);
+): Promise<MovieBoxCategoryResponse> {
+  return loadCachedCategory(5, page, perPage, sort, filters);
 }
 
 export async function getAnimation(
@@ -152,33 +305,52 @@ export async function getAnimation(
   sort = "RECOMMEND",
   filters: MovieBoxFilters = {},
   perPage = 24,
-) {
-  return getCategory(8, page, perPage, sort, filters);
+): Promise<MovieBoxCategoryResponse> {
+  return loadCachedCategory(8, page, perPage, sort, filters);
 }
 
-export async function getSearchSuggestions(query: string) {
-  const data = await movieboxRequest<any>("/subject/search-suggest", {
+async function loadSearchSuggestions(
+  query: string,
+): Promise<SearchSuggestion[]> {
+  const payload = await movieboxRequest("/subject/search-suggest", {
     method: "POST",
-    body: { keyword: query, perPage: 10 },
+    body: {
+      keyword: query,
+      perPage: 10,
+    },
   });
 
-  const inner = data?.data || {};
-  const rawItems = inner.items || inner.list || [];
-  const suggestions = rawItems.map((item: any) => {
-    const subject = item?.subject || {};
-    return {
-      title: subject.title || item.word || item.title || "",
-      slug: subject.detailPath || item.detailPath || null,
-      subject_id: subject.subjectId || item.subjectId || null,
-    };
-  });
+  const inner = dataRecord(payload);
+  const rawItems = firstArray(inner, ["items", "list"]);
 
-  return { suggestions };
+  return rawItems
+    .map((value): SearchSuggestion => {
+      const item = asRecord(value) ?? {};
+      const subject = nestedRecord(item, "subject");
+
+      return {
+        title:
+          asString(subject?.title) ??
+          asString(item.word) ??
+          asString(item.title) ??
+          "",
+        slug:
+          asString(subject?.detailPath) ??
+          asString(item.detailPath),
+        subject_id:
+          asStringOrNumber(subject?.subjectId) ??
+          asStringOrNumber(item.subjectId),
+      };
+    })
+    .filter((item) => Boolean(item.title));
 }
 
-export async function search(query: string, page = 1) {
+async function loadSearch(
+  query: string,
+  page: number,
+): Promise<SearchResponse> {
   try {
-    const data = await movieboxRequest<any>("/subject/search", {
+    const payload = await movieboxRequest("/subject/search", {
       method: "POST",
       body: {
         keyword: query,
@@ -187,31 +359,30 @@ export async function search(query: string, page = 1) {
       },
     });
 
-    const inner = data?.data || {};
-    const rawItems = inner.items || inner.subjects || inner.list || [];
-    const items = rawItems.map((sub: any) =>
-      normalizeItem(sub?.subject || sub),
-    );
+    const inner = dataRecord(payload);
+    const rawItems = firstArray(inner, ["items", "subjects", "list"]);
 
-    const pager = inner.pager || {};
+    const items = rawItems.map((value) => {
+      const record = asRecord(value);
+      return normalizeItem(record?.subject ?? value);
+    });
+
     return {
       query,
       page,
       items,
-      total: pager.totalCount || inner.total || items.length,
+      total: responseTotal(inner, items.length),
     };
-  } catch (primaryErr) {
+  } catch (primaryError: unknown) {
     try {
-      const suggestionData = await getSearchSuggestions(query);
-      const items = suggestionData.suggestions
-        .filter((item: any) => item.title)
-        .map((item: any) => ({
-          name: item.title,
-          poster_url: null,
-          slug: item.slug,
-          subject_id: item.subject_id,
-          kind: "mixed" as const,
-        }));
+      const suggestions = await loadSearchSuggestions(query);
+      const items: MovieBoxItem[] = suggestions.map((item) => ({
+        name: item.title,
+        poster_url: null,
+        slug: item.slug,
+        subject_id: item.subject_id,
+        kind: "mixed",
+      }));
 
       return {
         query,
@@ -220,22 +391,101 @@ export async function search(query: string, page = 1) {
         total: items.length,
       };
     } catch {
-      console.error("[moviebox] search failed", primaryErr);
-      return { query, page, items: [], total: 0 };
+      console.error("[moviebox] search failed", primaryError);
+      return {
+        query,
+        page,
+        items: [],
+        total: 0,
+      };
     }
   }
 }
 
-export async function getDetail(slug: string) {
-  const data = await movieboxRequest<any>("/detail", {
-    searchParams: { detailPath: slug },
-  });
-  return data?.data ?? data;
+const loadCachedSearch = unstable_cache(
+  loadSearch,
+  ["moviebox-search-v3"],
+  { revalidate: SEARCH_REVALIDATE_SECONDS },
+);
+
+export async function search(
+  query: string,
+  page = 1,
+): Promise<SearchResponse> {
+  return loadCachedSearch(query.trim(), page);
 }
 
-async function getPlayerDomain() {
-  const domData = await movieboxRequest<any>("/media-player/get-domain");
-  return String(domData?.data || "https://netfilm.world").replace(/\/$/, "");
+async function loadDetail(slug: string): Promise<unknown> {
+  const payload = await movieboxRequest("/detail", {
+    searchParams: { detailPath: slug },
+  });
+
+  const root = asRecord(payload);
+  return root?.data ?? payload;
+}
+
+const loadCachedDetail = unstable_cache(
+  loadDetail,
+  ["moviebox-detail-v3"],
+  { revalidate: DETAIL_REVALIDATE_SECONDS },
+);
+
+export async function getDetail(slug: string): Promise<unknown> {
+  return loadCachedDetail(slug);
+}
+
+async function getPlayerDomain(): Promise<string> {
+  const payload = await movieboxRequest("/media-player/get-domain");
+  const root = asRecord(payload);
+  const domain = asString(root?.data) ?? "https://netfilm.world";
+  return domain.replace(/\/$/, "");
+}
+
+function normalizePlayerStream(
+  value: unknown,
+): UpstreamPlayerStream | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const url = asString(record.url);
+
+  return {
+    id: asStringOrNumber(record.id) ?? undefined,
+    url: url ?? undefined,
+    resolutions:
+      asStringOrNumber(record.resolutions) ?? undefined,
+    format: asString(record.format) ?? undefined,
+    size: asStringOrNumber(record.size) ?? undefined,
+    duration: asFiniteNumber(record.duration) ?? undefined,
+    codecName: asString(record.codecName) ?? undefined,
+  };
+}
+
+function parsePlayerData(payload: unknown): PlayerData {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data) ?? {};
+
+  const streams = asArray(data.streams)
+    .map(normalizePlayerStream)
+    .filter((item): item is UpstreamPlayerStream => item !== null);
+
+  const dash = asArray(data.dash)
+    .map(normalizePlayerStream)
+    .filter((item): item is UpstreamPlayerStream => item !== null);
+
+  const hls = asArray(data.hls)
+    .map(asRecord)
+    .filter((item): item is JsonRecord => item !== null);
+
+  return {
+    streams,
+    dash,
+    hls,
+    hasResource: Boolean(data.hasResource),
+    title: asString(data.title) ?? undefined,
+    freeNum: asFiniteNumber(data.freeNum) ?? undefined,
+    limited: Boolean(data.limited),
+  };
 }
 
 async function fetchPlayerData(
@@ -244,7 +494,7 @@ async function fetchPlayerData(
   detailPath: string,
   se: number,
   ep: number,
-) {
+): Promise<PlayerData> {
   const playerReferer =
     domain +
     "/spa/videoPlayPage/movies/" +
@@ -268,45 +518,53 @@ async function fetchPlayerData(
     "&detailPath=" +
     encodeURIComponent(detailPath);
 
-  const resp = await fetch(playUrl, {
+  const response = await fetch(playUrl, {
     headers: {
       ...PLAYER_HEADERS,
       Referer: playerReferer,
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(PLAYER_TIMEOUT_MS),
   });
 
-  if (!resp.ok) {
-    throw new Error("Stream upstream error: " + resp.status);
+  if (!response.ok) {
+    throw new Error(
+      `Stream upstream error: ${response.status} ${response.statusText}`,
+    );
   }
 
-  const json = await resp.json();
-  return json?.data || {};
+  return parsePlayerData(await response.json());
 }
 
 function normalizeStreamData(
-  data: any,
+  data: PlayerData,
   subjectId: string | number,
   se: number,
   ep: number,
 ): MovieBoxStreamResponse {
-  const sources = (data.streams || [])
-    .filter((stream: any) => Boolean(stream?.url))
-    .map((stream: any) => ({
+  const sources: MovieBoxStreamSource[] = data.streams
+    .filter(
+      (stream): stream is UpstreamPlayerStream & { url: string } =>
+        Boolean(stream.url),
+    )
+    .map((stream) => ({
       id: stream.id,
-      quality: stream.resolutions ? String(stream.resolutions) + "p" : undefined,
+      quality:
+        stream.resolutions !== undefined
+          ? `${String(stream.resolutions)}p`
+          : undefined,
       url: stream.url,
-      type: String(stream.format || "mp4").toLowerCase(),
+      type: (stream.format ?? "mp4").toLowerCase(),
       size: stream.size,
       duration: stream.duration,
       codec: stream.codecName,
     }));
 
   const hasResource =
-    Boolean(data.hasResource) ||
+    data.hasResource ||
     sources.length > 0 ||
-    (Array.isArray(data.hls) && data.hls.length > 0) ||
-    (Array.isArray(data.dash) && data.dash.length > 0);
+    data.hls.length > 0 ||
+    data.dash.length > 0;
 
   return {
     subject_id: subjectId,
@@ -316,10 +574,10 @@ function normalizeStreamData(
     subtitles: [],
     title: data.title,
     has_resource: hasResource,
-    hls: data.hls || [],
-    dash: data.dash || [],
+    hls: data.hls,
+    dash: data.dash.map((entry) => ({ ...entry })),
     free_episodes: data.freeNum,
-    limited: Boolean(data.limited),
+    limited: data.limited,
     note: hasResource ? null : "No stream found for this episode.",
   };
 }
@@ -334,27 +592,35 @@ export async function getStreamSources(
 
   let usedSe = Number.isFinite(se) ? se : 1;
   let usedEp = Number.isFinite(ep) ? ep : 1;
-  let data = await fetchPlayerData(
-    domain,
+
+  let normalized = normalizeStreamData(
+    await fetchPlayerData(
+      domain,
+      subjectId,
+      detailPath,
+      usedSe,
+      usedEp,
+    ),
     subjectId,
-    detailPath,
     usedSe,
     usedEp,
   );
-  let normalized = normalizeStreamData(data, subjectId, usedSe, usedEp);
 
-  // MovieBox movie metadata commonly reports season index 0. The old Pinflix
-  // UI hard-coded season 1, so valid movies could appear unplayable.
   if (!normalized.has_resource && usedSe !== 0) {
-    const fallback = await fetchPlayerData(domain, subjectId, detailPath, 0, 1);
     const fallbackNormalized = normalizeStreamData(
-      fallback,
+      await fetchPlayerData(
+        domain,
+        subjectId,
+        detailPath,
+        0,
+        1,
+      ),
       subjectId,
       0,
       1,
     );
+
     if (fallbackNormalized.has_resource) {
-      data = fallback;
       normalized = fallbackNormalized;
       usedSe = 0;
       usedEp = 1;
@@ -368,6 +634,13 @@ export async function getStreamSources(
   };
 }
 
+function normalizeCaption(value: unknown): MovieBoxCaption | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  return { ...record };
+}
+
 export async function getCaptions(
   subjectId: string | number,
   detailPath: string,
@@ -375,8 +648,10 @@ export async function getCaptions(
   ep = 1,
 ): Promise<MovieBoxCaptionResponse> {
   const domain = await getPlayerDomain();
+
   let usedSe = se;
   let usedEp = ep;
+
   let playData = await fetchPlayerData(
     domain,
     subjectId,
@@ -385,25 +660,32 @@ export async function getCaptions(
     usedEp,
   );
 
-  let streams = playData.streams || [];
-  let dash = playData.dash || [];
+  if (
+    playData.streams.length === 0 &&
+    playData.dash.length === 0 &&
+    usedSe !== 0
+  ) {
+    const fallback = await fetchPlayerData(
+      domain,
+      subjectId,
+      detailPath,
+      0,
+      1,
+    );
 
-  if (!streams.length && !dash.length && usedSe !== 0) {
-    const fallback = await fetchPlayerData(domain, subjectId, detailPath, 0, 1);
-    if ((fallback.streams || []).length || (fallback.dash || []).length) {
+    if (fallback.streams.length || fallback.dash.length) {
       playData = fallback;
-      streams = fallback.streams || [];
-      dash = fallback.dash || [];
       usedSe = 0;
       usedEp = 1;
     }
   }
 
-  const first = streams[0] || dash[0];
+  const first = playData.streams[0] ?? playData.dash[0];
   const streamId = first?.id;
-  const streamFormat = first?.format || (streams.length ? "MP4" : "DASH");
+  const streamFormat =
+    first?.format ?? (playData.streams.length ? "MP4" : "DASH");
 
-  if (!streamId) {
+  if (streamId === undefined) {
     return {
       subject_id: subjectId,
       se: usedSe,
@@ -413,7 +695,7 @@ export async function getCaptions(
     };
   }
 
-  const data = await movieboxRequest<any>("/subject/caption", {
+  const payload = await movieboxRequest("/subject/caption", {
     searchParams: {
       format: streamFormat,
       id: streamId,
@@ -422,12 +704,16 @@ export async function getCaptions(
     },
   });
 
-  const inner = data?.data || {};
-  const captions = Array.isArray(inner)
+  const root = asRecord(payload);
+  const inner = root?.data;
+
+  const rawCaptions = Array.isArray(inner)
     ? inner
-    : Array.isArray(inner?.captions)
-      ? inner.captions
-      : [];
+    : firstArray(asRecord(inner) ?? {}, ["captions"]);
+
+  const captions = rawCaptions
+    .map(normalizeCaption)
+    .filter((item): item is MovieBoxCaption => item !== null);
 
   return {
     subject_id: subjectId,
