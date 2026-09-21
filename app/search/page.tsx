@@ -1,6 +1,9 @@
 import { Search as SearchIcon } from "lucide-react";
+import { headers } from "next/headers";
 import { ChannelGrid } from "@/components/channel-card";
+import { searchPrivateChannels } from "@/lib/iptv/private-channels";
 import { searchChannels } from "@/lib/iptv/provider/iptv-org";
+import { trustedViewerCountry } from "@/lib/viewer-location";
 import type { ChannelPreview } from "@/lib/iptv/types";
 
 export const metadata = {
@@ -27,7 +30,15 @@ export default async function SearchPage({
 
   if (query.length >= 2) {
     try {
-      results = await searchChannels(query, 60);
+      const publicResults = await searchChannels(query, 60);
+      const country = trustedViewerCountry(await headers());
+      const privateResults = country === "BD" ? searchPrivateChannels(query, 60) : [];
+
+      const unique = new Map<string, ChannelPreview>();
+      for (const channel of [...privateResults, ...publicResults]) {
+        if (!unique.has(channel.id)) unique.set(channel.id, channel);
+      }
+      results = [...unique.values()].slice(0, 60);
     } catch (error: unknown) {
       console.error("Pinflix search failed", error);
       failed = true;
