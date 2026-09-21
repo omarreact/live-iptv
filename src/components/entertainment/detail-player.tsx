@@ -1,18 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowLeft,
   Captions,
   Film,
   LoaderCircle,
   Play,
   RotateCcw,
   Star,
-  X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AdaptivePlayer } from "@/components/media/adaptive-player";
 import type { MediaDetail } from "@/types/catalog";
 import { cn } from "@/lib/utils";
@@ -20,27 +19,11 @@ import type { BrowserPlaybackResult } from "@/types/media";
 
 export function EntertainmentDetailPlayer({
   detail,
-  closeHref,
+  backHref = "/entertainment",
 }: {
   detail: MediaDetail;
-  closeHref: string;
+  backHref?: string;
 }) {
-  const router = useRouter();
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") router.push(closeHref, { scroll: false });
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [closeHref, router]);
 
   const initialSeason =
     detail.playback?.defaultSeason ?? detail.seasons[0]?.number ?? 1;
@@ -117,45 +100,31 @@ export function EntertainmentDetailPlayer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-md sm:items-center sm:p-5">
-      <Link
-        href={closeHref}
-        scroll={false}
-        aria-label="Close details"
-        className="absolute inset-0"
-      />
+    <div className="min-h-dvh bg-[#0b0b0d] text-white">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#0b0b0d]/92 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+          <Link
+            href={backHref}
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white/70 transition hover:bg-white/10 hover:text-white"
+            aria-label="Back to entertainment"
+          >
+            <ArrowLeft className="size-4" />
+            <span className="hidden sm:inline">Back</span>
+          </Link>
 
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="pinflix-entertainment-dialog-title"
-        className="relative z-10 flex max-h-[96dvh] w-full max-w-6xl flex-col overflow-hidden rounded-t-[28px] border border-white/10 bg-[#0b0b0d] shadow-2xl shadow-black/60 sm:max-h-[92dvh] sm:rounded-[28px]"
-      >
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-white/10 bg-[#0b0b0d]/92 px-4 py-3 backdrop-blur-xl sm:px-6">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand">
               Pinflix Entertainment
             </p>
-            <h2
-              id="pinflix-entertainment-dialog-title"
-              className="mt-0.5 truncate text-base font-bold text-white sm:text-lg"
-            >
+            <h1 className="mt-0.5 truncate text-base font-bold text-white sm:text-lg">
               {detail.title}
-            </h2>
+            </h1>
           </div>
+        </div>
+      </header>
 
-          <Link
-            href={closeHref}
-            scroll={false}
-            className="grid size-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-white/60 transition hover:bg-white/10 hover:text-white"
-            aria-label="Close details"
-          >
-            <X className="size-5" />
-          </Link>
-        </header>
-
-        <div className="overflow-y-auto overscroll-contain">
-          <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
+      <section className="mx-auto w-full max-w-6xl px-4 pb-24 pt-5 sm:px-6 sm:pt-7 lg:px-8">
+        <div className="mx-auto w-full max-w-5xl">
             {hasPlayableSource && playback ? (
               <div className="animate-in fade-in duration-300">
                 <AdaptivePlayer
@@ -361,7 +330,6 @@ export function EntertainmentDetailPlayer({
                 ) : null}
               </div>
             </div>
-          </div>
         </div>
       </section>
     </div>
