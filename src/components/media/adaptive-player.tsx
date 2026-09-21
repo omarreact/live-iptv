@@ -638,7 +638,7 @@ export function AdaptivePlayer({
               label={result.subtitles[subtitleIndex].label}
               default
             />
-          ) : null>
+          ) : null}
         </video>
 
         <PlayerStateOverlay

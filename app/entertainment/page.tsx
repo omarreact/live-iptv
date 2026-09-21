@@ -29,6 +29,11 @@ import type { MediaDetail } from "@/types/catalog";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = {
+  title: "Entertainment",
+  description: "Browse movies, TV series, animation, and available playback on Pinflix.",
+};
+
 type SearchParams = Promise<
   Record<string, string | string[] | undefined>
 >;
@@ -117,7 +122,7 @@ export default async function EntertainmentPage({
 
   const context = { view, query, page };
 
-  let visibleItems: MovieBoxItem[] = [];
+  let visibleItems: MovieBoxItem[];
   let home = null;
   let catalog: MovieBoxCategoryResponse | null = null;
 

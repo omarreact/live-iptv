@@ -15,6 +15,16 @@ export default defineConfig([
     rules: {
       ...nextPlugin.configs["core-web-vitals"].rules,
       "@next/next/no-img-element": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/purity": "off",
+    },
+  },
+  {
+    files: ["bridge/**/*.mjs"],
+    rules: {
+      "no-undef": "off",
+      "no-useless-assignment": "off",
+      "@typescript-eslint/no-unused-vars": "off",
     },
   },
   prettier,

@@ -4,6 +4,11 @@ import { getGuideSummary } from "@/lib/iptv/provider/iptv-org";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = {
+  title: "Browse Live TV",
+  description: "Browse live TV channels by country and category on Pinflix.",
+};
+
 function flagEmoji(code: string): string {
   const cc = code.toUpperCase();
   if (cc.length !== 2) return "";

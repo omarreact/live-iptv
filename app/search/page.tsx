@@ -3,6 +3,11 @@ import { ChannelGrid } from "@/components/channel-card";
 import { searchChannels } from "@/lib/iptv/provider/iptv-org";
 import type { ChannelPreview } from "@/lib/iptv/types";
 
+export const metadata = {
+  title: "Search",
+  description: "Search live TV channels and countries on Pinflix.",
+};
+
 type SearchParams = Promise<{ q?: string | string[] }>;
 
 function first(value: string | string[] | undefined): string {

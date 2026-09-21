@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ChannelPreview } from "@/lib/iptv/types";
 import { cn } from "@/lib/utils";
 
@@ -22,15 +22,12 @@ export function ChannelCard({
   featured?: boolean;
   className?: string;
 }) {
-  const [broken, setBroken] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
+  const [loadedLogo, setLoadedLogo] = useState<string | null>(null);
+  const broken = Boolean(channel.logo) && failedLogo === channel.logo;
+  const loaded = Boolean(channel.logo) && loadedLogo === channel.logo;
   const showLogo = Boolean(channel.logo) && !broken;
   const available = channel.available !== false;
-
-  useEffect(() => {
-    setBroken(false);
-    setLoaded(false);
-  }, [channel.logo]);
 
   return (
     <Link
@@ -64,13 +61,13 @@ export function ChannelCard({
             alt=""
             fill
             sizes={featured ? "288px" : "176px"}
-            unoptimized={/\.(?:svg|gif)(?:\?|$)/i.test(channel.logo)}
+            unoptimized
             loading="lazy"
             referrerPolicy="no-referrer"
-            onLoad={() => setLoaded(true)}
+            onLoad={() => setLoadedLogo(channel.logo)}
             onError={() => {
-              setBroken(true);
-              setLoaded(true);
+              setFailedLogo(channel.logo);
+              setLoadedLogo(channel.logo);
             }}
             className={cn(
               "object-contain p-5 transition-[opacity,transform] duration-300 ease-out",

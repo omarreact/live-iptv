@@ -118,26 +118,36 @@ function proxyUrl(origin: string, target: string, extras: ProxyExtras): string {
   return `${origin}/api/stream?${p.toString()}`;
 }
 
-function rewriteM3u8(text: string, base: string, origin: string, extras: ProxyExtras): string {
+function rewriteM3u8(
+  text: string,
+  base: string,
+  origin: string,
+  extras: ProxyExtras,
+  allowedHosts: Set<string>,
+): string {
+  const rewriteChild = (raw: string): string => {
+    try {
+      const child = assertSafeUrl(new URL(raw, base).href);
+      return allowedHosts.has(child.hostname.toLowerCase())
+        ? proxyUrl(origin, child.href, extras)
+        : child.href;
+    } catch {
+      return raw;
+    }
+  };
+
   return text
     .split(/\r?\n/)
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return line;
       if (trimmed.startsWith("#")) {
-        return line.replace(/URI="([^"]+)"/gi, (_, uri: string) => {
-          try {
-            return `URI="${proxyUrl(origin, new URL(uri, base).href, extras)}"`;
-          } catch {
-            return `URI="${uri}"`;
-          }
-        });
+        return line.replace(
+          /URI="([^"]+)"/gi,
+          (_, uri: string) => `URI="${rewriteChild(uri)}"`,
+        );
       }
-      try {
-        return proxyUrl(origin, new URL(trimmed, base).href, extras);
-      } catch {
-        return line;
-      }
+      return rewriteChild(trimmed);
     })
     .join("\n");
 }
@@ -275,7 +285,14 @@ export async function proxyStream(request: Request): Promise<Response> {
   if (treatAsPlaylist) {
     const text = await upstream.text();
     // Relative HLS URLs must resolve from the final URL after redirects.
-    const rewritten = rewriteM3u8(text, finalUrl.href, origin, extras);
+    const allowedHosts = await getAllowedHosts();
+    const rewritten = rewriteM3u8(
+      text,
+      finalUrl.href,
+      origin,
+      extras,
+      allowedHosts,
+    );
     return new Response(rewritten, {
       status: 200,
       headers: passthroughHeaders(upstream, "application/vnd.apple.mpegurl", finalUrl),

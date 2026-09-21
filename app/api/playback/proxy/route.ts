@@ -100,8 +100,12 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
   if (
     !providerId ||
     !id ||
+    providerId.length > 64 ||
+    id.length > 256 ||
+    (slug && slug.length > 512) ||
     !Number.isInteger(sourceIndex) ||
-    sourceIndex < 0
+    sourceIndex < 0 ||
+    sourceIndex > 50
   ) {
     return Response.json(
       { error: "provider, id and a valid source index are required" },

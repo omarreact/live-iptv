@@ -65,6 +65,8 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const [streamIndex, setStreamIndex] = useState(0);
   const [transport, setTransport] = useState<"proxy" | "direct">("proxy");
   const [epg, setEpg] = useState<EpgPayload | null>(null);
+  const [needsGesture, setNeedsGesture] = useState(false);
+  const [nowMs, setNowMs] = useState(0);
 
   useEffect(() => {
     addRecent(channelPreview);
@@ -86,6 +88,13 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       .catch(() => {});
     return () => controller.abort();
   }, [channel.id]);
+
+  useEffect(() => {
+    const updateClock = () => setNowMs(Date.now());
+    updateClock();
+    const timer = window.setInterval(updateClock, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const revealChrome = useCallback(() => {
     setChromeVisible(true);
@@ -128,6 +137,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
     setError(null);
     setStarted(false);
     setPlaying(false);
+    setNeedsGesture(false);
 
     if (!(channel.streams?.length ?? 0) && !channel.url) {
       setError("No public stream is currently available for this channel.");
@@ -212,12 +222,34 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       }, 12_000);
     };
 
+    const handlePlayRejection = (playError: unknown) => {
+      if (cancelled) return;
+      if (playError instanceof Error && playError.name === "NotAllowedError") {
+        clearStartupTimer();
+        clearStallTimer();
+        setNeedsGesture(true);
+        setStarted(true);
+        setError(null);
+        return;
+      }
+      fail("The browser could not start this live source.");
+    };
+
+    const attemptPlay = async () => {
+      try {
+        await video.play();
+      } catch (playError: unknown) {
+        handlePlayRejection(playError);
+      }
+    };
+
     const onPlaying = () => {
       hasStarted = true;
       clearStartupTimer();
       clearStallTimer();
       setPlaying(true);
       setStarted(true);
+      setNeedsGesture(false);
       setError(null);
       lastCurrentTime = video.currentTime;
       lastProgressAt = Date.now();
@@ -264,7 +296,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       const native = video.canPlayType("application/vnd.apple.mpegurl");
       if (native) {
         video.src = src;
-        await video.play().catch(() => {});
+        await attemptPlay();
         return;
       }
       const { default: Hls } = await import("hls.js");
@@ -275,7 +307,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
           return;
         }
         video.src = src;
-        await video.play().catch(() => fail("Live playback is not supported in this browser."));
+        await attemptPlay();
         return;
       }
       const hls = new Hls({
@@ -290,7 +322,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       hls.loadSource(src);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
+        void attemptPlay();
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         const d = data as { fatal?: boolean; response?: { code?: number } };
@@ -308,7 +340,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       if (cancelled) return;
       if (!mpegts.isSupported()) {
         video.src = src;
-        await video.play().catch(() => fail("Live playback is not supported in this browser."));
+        await attemptPlay();
         return;
       }
       const player = mpegts.createPlayer(
@@ -324,14 +356,16 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
       engineRef.current = player;
       player.attachMediaElement(video);
       player.load();
-      void Promise.resolve(player.play()).catch(() => {});
+      void Promise.resolve(player.play()).catch((playError: unknown) => {
+        handlePlayRejection(playError);
+      });
       player.on(mpegts.Events.ERROR, () => fail());
     }
     async function attach() {
       try {
         if (kind === "mp4") {
           video.src = src;
-          await video.play().catch(() => {});
+          await attemptPlay();
           return;
         }
         if (kind === "hls") {
@@ -426,8 +460,18 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) video.play().catch(() => {});
-    else video.pause();
+    if (video.paused) {
+      video.play().then(
+        () => setNeedsGesture(false),
+        (playError: unknown) => {
+          if (!(playError instanceof Error && playError.name === "NotAllowedError")) {
+            setError("The browser could not start this live source.");
+          }
+        },
+      );
+    } else {
+      video.pause();
+    }
     revealChrome();
   }, [revealChrome]);
   const toggleMute = useCallback(() => {
@@ -503,7 +547,7 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
         0,
         Math.min(
           100,
-          ((Date.now() - new Date(epg.now.start).getTime()) /
+          ((nowMs - new Date(epg.now.start).getTime()) /
             Math.max(1, new Date(epg.now.end).getTime() - new Date(epg.now.start).getTime())) *
             100,
         ),
@@ -533,6 +577,24 @@ export function Player({ channel, related }: { channel: Channel; related: Channe
                 : "Connecting to live signal"
             }
           />
+        ) : null}
+        {needsGesture && !error ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/35 p-6">
+            <Button
+              size="lg"
+              onClick={() => {
+                const video = videoRef.current;
+                if (!video) return;
+                void video.play().then(
+                  () => setNeedsGesture(false),
+                  () => setError("Tap-to-play was blocked by the browser."),
+                );
+              }}
+            >
+              <Play className="size-5 fill-current" />
+              Tap to play
+            </Button>
+          </div>
         ) : null}
         {error ? (
           <div className="absolute inset-0 flex items-center justify-center p-6">
