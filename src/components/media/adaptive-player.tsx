@@ -137,6 +137,7 @@ export function AdaptivePlayer({
   useEffect(() => {
     const media = videoRef.current;
     if (!media || !source) return;
+    const element: HTMLVideoElement = media;
 
     let cancelled = false;
 
@@ -149,29 +150,29 @@ export function AdaptivePlayer({
     dashRef.current?.reset();
     dashRef.current = null;
 
-    media.pause();
-    media.removeAttribute("src");
-    media.load();
+    element.pause();
+    element.removeAttribute("src");
+    element.load();
 
     const restoreTime = () => {
-      if (resumeAt.current > 0 && Number.isFinite(media.duration)) {
-        media.currentTime = Math.min(resumeAt.current, media.duration || resumeAt.current);
+      if (resumeAt.current > 0 && Number.isFinite(element.duration)) {
+        element.currentTime = Math.min(resumeAt.current, element.duration || resumeAt.current);
       }
     };
 
-    media.addEventListener("loadedmetadata", restoreTime);
+    element.addEventListener("loadedmetadata", restoreTime);
 
     async function startPlayback() {
       if (source.protocol === "mp4") {
-        media.src = source.url;
-        if (autoPlay) await media.play().catch(() => undefined);
+        element.src = source.url;
+        if (autoPlay) await element.play().catch(() => undefined);
         return;
       }
 
       if (source.protocol === "hls") {
-        if (media.canPlayType("application/vnd.apple.mpegurl")) {
-          media.src = source.url;
-          if (autoPlay) await media.play().catch(() => undefined);
+        if (element.canPlayType("application/vnd.apple.mpegurl")) {
+          element.src = source.url;
+          if (autoPlay) await element.play().catch(() => undefined);
           return;
         }
 
@@ -198,7 +199,7 @@ export function AdaptivePlayer({
             })),
           ]);
 
-          if (autoPlay) void media.play().catch(() => undefined);
+          if (autoPlay) void element.play().catch(() => undefined);
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -218,7 +219,7 @@ export function AdaptivePlayer({
         });
 
         hls.loadSource(source.url);
-        hls.attachMedia(media);
+        hls.attachMedia(element);
         return;
       }
 
@@ -259,7 +260,7 @@ export function AdaptivePlayer({
         setError("Unable to play this DASH stream.");
       });
 
-      player.initialize(media, source.url, autoPlay);
+      player.initialize(element, source.url, autoPlay);
     }
 
     void startPlayback().catch((playbackError: unknown) => {
@@ -269,7 +270,7 @@ export function AdaptivePlayer({
 
     return () => {
       cancelled = true;
-      media.removeEventListener("loadedmetadata", restoreTime);
+      element.removeEventListener("loadedmetadata", restoreTime);
       hlsRef.current?.destroy();
       hlsRef.current = null;
       dashRef.current?.reset();
