@@ -31,7 +31,8 @@ The setup script:
 - tests DHAKA-FLIX and CineplexBD reachability from that PC;
 - generates three cryptographically random bridge/token secrets;
 - writes a local `.env` file (ignored by Git);
-- preconfigures the `dhakaflix-json` and `cineplexbd` adapters.
+- preconfigures the `dhakaflix-json` and `cineplexbd` adapters;
+- enables the optional same-egress MovieBox media relay.
 
 Then verify:
 
@@ -68,6 +69,7 @@ Then configure Vercel:
 ```text
 PINFLIX_BD_BRIDGE_URL=https://your-bridge.example.com
 PINFLIX_BD_BRIDGE_SECRET=<same BRIDGE_SECRET>
+PINFLIX_MOVIEBOX_BRIDGE_ENABLED=true
 PINFLIX_PRIVATE_PROXY_KEY=<separate long random key, optional but recommended>
 ```
 
@@ -136,3 +138,35 @@ CineplexBD uses catalog/detail pages plus the HAR-confirmed `/search_ajax.php` J
 The adapters do not bypass network access controls. The bridge machine must already be able to reach each configured source.
 
 For CineplexBD, Pinflix opens the provider detail/playback page instead of extracting the captured `md5/expires` media URL. Only add sources you are authorized to access.
+
+
+## MovieBox same-egress playback
+
+MovieBox can return short-lived signed MP4 URLs that are rejected when they are
+resolved from one network and fetched from a different hosted runtime. The
+optional MovieBox bridge path keeps resolution and media fetching on the same
+bridge egress.
+
+Enable it on the bridge:
+
+```text
+MOVIEBOX_BRIDGE_ENABLED=true
+```
+
+Enable bridge preference in the Pinflix/Vercel environment:
+
+```text
+PINFLIX_MOVIEBOX_BRIDGE_ENABLED=true
+PINFLIX_BD_BRIDGE_URL=https://your-bridge.example.com
+PINFLIX_BD_BRIDGE_SECRET=<same BRIDGE_SECRET>
+```
+
+The browser receives only a short-lived encrypted bridge URL. It never receives
+the provider cookie/header payload. The relay accepts only media URLs returned by
+the provider resolver and restricts targets to the fixed MovieBox media domain
+families.
+
+This feature does not bypass provider access controls. If the provider rejects
+the bridge network or the title is unavailable there, Pinflix falls back to its
+normal unavailable/preview behavior. Use it only for content and networks you
+are authorized to access.
