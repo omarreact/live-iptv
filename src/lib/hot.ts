@@ -1,7 +1,6 @@
 import { getNowNext } from "./iptv/epg";
 import { getChannelById } from "./iptv/provider/iptv-org";
 import { getFastCategoryChannels } from "./iptv/provider/multi";
-import { countryName } from "./viewer-location";
 
 export type HotItem = {
   id: string;
@@ -13,6 +12,15 @@ export type HotItem = {
 };
 
 const HOT_TIMEOUT_MS = 2_200;
+
+function countryName(code: string, locale = "en"): string {
+  try {
+    return new Intl.DisplayNames([locale], { type: "region" }).of(code.toUpperCase()) ?? code;
+  } catch {
+    return code.toUpperCase();
+  }
+}
+
 
 async function timeout<T>(promise: Promise<T>, fallback: T): Promise<T> {
   return Promise.race([
