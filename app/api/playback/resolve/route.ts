@@ -76,7 +76,7 @@ function toBrowserResult(
     const hasProtectedHeaders =
       source.headers && Object.keys(source.headers).length > 0;
 
-    let safeDirectUrl: string | null = null;
+    let safeDirectUrl: string;
     try {
       safeDirectUrl = assertSafeUrl(source.url).href;
     } catch {
