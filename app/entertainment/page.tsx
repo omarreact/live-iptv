@@ -1,7 +1,7 @@
-import { EntertainmentHub } from "@/components/entertainment-hub";
+import { EntertainmentPageClient } from "@/components/entertainment-page";
 
 export const dynamic = "force-dynamic";
 
 export default function EntertainmentPage() {
-  return <EntertainmentHub />;
+  return <EntertainmentPageClient />;
 }
