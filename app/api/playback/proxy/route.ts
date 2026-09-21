@@ -214,12 +214,16 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
     });
 
     if (!upstream.ok && upstream.status !== 206) {
+      const sourceUrl = new URL(source.url);
       console.warn("[playback.proxy] upstream rejected media request", {
         status: upstream.status,
         providerId,
         sourceIndex,
         protocol: source.protocol,
-        hostname: new URL(source.url).hostname,
+        hostname: sourceUrl.hostname,
+        sourceScheme: sourceUrl.protocol,
+        upgrade: upstream.headers.get("upgrade"),
+        server: upstream.headers.get("server"),
         hasRange: Boolean(range),
         hasProviderHeaders: Boolean(hasProviderHeaders),
       });
