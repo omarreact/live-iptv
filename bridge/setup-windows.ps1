@@ -2,7 +2,7 @@
 param(
     [string]$DhakaFlixBase = "http://172.16.50.14/DHAKA-FLIX-14/",
     [string]$CineplexBase = "http://cineplexbd.net/",
-    [string]$PinflixOrigin = "https://iptv.pincodeit.com",
+    [string]$PinflixOrigin = "https://pinflix.pincodeit.com",
     [string]$PublicBridgeUrl = ""
 )
 
