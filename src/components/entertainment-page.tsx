@@ -554,12 +554,16 @@ function DetailDialog({
   );
 }
 
-export function EntertainmentPageClient() {
+export function EntertainmentPageClient({
+  initialHome,
+}: {
+  initialHome: MovieBoxHomeResponse;
+}) {
   const [view, setView] = useState<ViewId>("home");
-  const [home, setHome] = useState<MovieBoxHomeResponse | null>(null);
+  const home = initialHome;
   const [catalog, setCatalog] = useState<MovieBoxCategoryResponse | null>(null);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -567,37 +571,10 @@ export function EntertainmentPageClient() {
   const [selected, setSelected] = useState<MovieBoxItem | null>(null);
 
   useEffect(() => {
-    if (view !== "home") return;
-    const controller = new AbortController();
-
-    async function load() {
-      setLoading(true);
-      try {
-        const response = await fetch("/api/moviebox/home", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const data = await response.json();
-        if (!controller.signal.aborted) setHome(data);
-      } catch {
-        if (!controller.signal.aborted) {
-          setHome({
-            status: "error",
-            sections: [],
-            error: "MovieBox is unavailable right now.",
-          });
-        }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
+    if (view === "home") {
+      setLoading(false);
+      return;
     }
-
-    load();
-    return () => controller.abort();
-  }, [view]);
-
-  useEffect(() => {
-    if (view === "home") return;
     const config = VIEWS.find((entry) => entry.id === view);
     const endpoint = config?.endpoint;
     if (!endpoint) return;
