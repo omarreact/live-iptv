@@ -1,3 +1,4 @@
+import { assertSafeUrl } from "@/lib/iptv/proxy.server";
 import { getPlaybackProvider } from "@/lib/providers/registry.server";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ const BLOCKED_UPSTREAM_HEADERS = new Set([
   "proxy-authenticate",
   "proxy-authorization",
 ]);
+
+const MAX_REDIRECTS = 4;
 
 const PASSTHROUGH_RESPONSE_HEADERS = [
   "content-type",
@@ -66,6 +69,37 @@ function proxyResponseHeaders(upstream: Response): Headers {
   }
 
   return headers;
+}
+
+async function fetchSafeUpstream(
+  initialUrl: string,
+  init: {
+    method: "GET" | "HEAD";
+    headers: Headers;
+    signal: AbortSignal;
+  },
+): Promise<Response> {
+  let current = assertSafeUrl(initialUrl);
+
+  for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
+    const response = await fetch(current, {
+      method: init.method,
+      headers: init.headers,
+      redirect: "manual",
+      cache: "no-store",
+      signal: init.signal,
+    });
+
+    if (response.status < 300 || response.status >= 400) return response;
+    if (redirect === MAX_REDIRECTS) throw new Error("Too many playback redirects");
+
+    const location = response.headers.get("location");
+    if (!location) throw new Error("Playback redirect is missing a location");
+
+    current = assertSafeUrl(new URL(location, current).href);
+  }
+
+  throw new Error("Playback redirect failed");
 }
 
 function upstreamFailure(status: number): Response {
@@ -171,11 +205,9 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
     if (range) upstreamHeaders.set("range", range);
     if (ifRange) upstreamHeaders.set("if-range", ifRange);
 
-    const upstream = await fetch(source.url, {
+    const upstream = await fetchSafeUpstream(source.url, {
       method: headOnly ? "HEAD" : "GET",
       headers: upstreamHeaders,
-      redirect: "follow",
-      cache: "no-store",
       signal: request.signal,
     });
 

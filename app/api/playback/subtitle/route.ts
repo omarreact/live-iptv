@@ -6,11 +6,40 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
+const MAX_REDIRECTS = 4;
+const SUBTITLE_TIMEOUT_MS = 8_000;
 
 function optionalInteger(value: string | null): number | undefined {
   if (value === null || value.trim() === "") return undefined;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+async function fetchSubtitle(initial: URL): Promise<Response> {
+  let current = initial;
+
+  for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
+    const response = await fetch(current, {
+      headers: {
+        accept: "text/vtt,text/plain,application/x-subrip,*/*;q=0.5",
+        "user-agent":
+          "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/148 Mobile Safari/537.36",
+      },
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(SUBTITLE_TIMEOUT_MS),
+    });
+
+    if (response.status < 300 || response.status >= 400) return response;
+    if (redirect === MAX_REDIRECTS) throw new Error("Too many subtitle redirects");
+
+    const location = response.headers.get("location");
+    if (!location) throw new Error("Subtitle redirect is missing a location");
+
+    current = assertSafeUrl(new URL(location, current).href);
+  }
+
+  throw new Error("Subtitle redirect failed");
 }
 
 function srtToVtt(input: string): string {
@@ -71,16 +100,7 @@ export async function GET(request: Request) {
     }
 
     const target = assertSafeUrl(subtitle.url);
-    const upstream = await fetch(target, {
-      headers: {
-        accept: "text/vtt,text/plain,application/x-subrip,*/*;q=0.5",
-        "user-agent":
-          "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/148 Mobile Safari/537.36",
-      },
-      cache: "no-store",
-      redirect: "follow",
-      signal: AbortSignal.timeout(8_000),
-    });
+    const upstream = await fetchSubtitle(target);
 
     if (!upstream.ok) {
       return Response.json(
