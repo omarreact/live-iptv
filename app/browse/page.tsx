@@ -20,7 +20,11 @@ export default async function BrowsePage() {
     <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <header className="max-w-2xl">
         <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Browse</h1>
-        <p className="mt-2 text-muted">Browse the curated 142-channel Pinflix Live TV guide.</p>
+        <p className="mt-2 text-muted">
+          {data.total > 0
+            ? `Browse ${data.total.toLocaleString()} live channels from around the world.`
+            : "Browse the Pinflix Live TV guide."}
+        </p>
       </header>
 
       <form action="/search" method="get" className="relative mt-5 max-w-2xl">

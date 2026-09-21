@@ -6,7 +6,7 @@ import type {
 } from "./types";
 
 const API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff";
-const REQUEST_TIMEOUT_MS = 6_000;
+const REQUEST_TIMEOUT_MS = 5_000;
 const REQUEST_RETRY_DELAY_MS = 150;
 const REQUEST_ATTEMPTS = 2;
 const TOKEN_BOOTSTRAP_TIMEOUT_MS = 4_000;
@@ -173,6 +173,13 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
+}
+
 async function requestWithRetry(
   url: URL,
   options: MovieBoxRequestOptions,
@@ -197,7 +204,7 @@ async function requestWithRetry(
     } catch (error: unknown) {
       lastError = error;
 
-      if (attempt + 1 >= REQUEST_ATTEMPTS) {
+      if (isTimeoutError(error) || attempt + 1 >= REQUEST_ATTEMPTS) {
         throw error;
       }
 

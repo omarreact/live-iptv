@@ -19,12 +19,14 @@ import type {
   MovieBoxStreamSource,
 } from "./types";
 
-const PLAYER_TIMEOUT_MS = 10_000;
-const METADATA_REVALIDATE_SECONDS = 300;
+const PLAYER_TIMEOUT_MS = 6_500;
+const METADATA_REVALIDATE_SECONDS = 900;
 const PLAYER_DOMAIN_TTL_MS = 5 * 60_000;
 const PLAYER_DOMAIN_FALLBACK = "https://mzfi.me";
 const SEARCH_REVALIDATE_SECONDS = 120;
-const DETAIL_REVALIDATE_SECONDS = 600;
+const DETAIL_REVALIDATE_SECONDS = 1_800;
+const HOME_MAX_SECTIONS = 10;
+const HOME_ITEMS_PER_SECTION = 12;
 
 const PLAYER_HEADERS: Record<string, string> = {
   "User-Agent":
@@ -189,8 +191,8 @@ async function loadHome(): Promise<MovieBoxHomeResponse> {
       if (items.length) {
         sections.push({
           section: "Banner",
-          count: items.length,
-          items,
+          count: Math.min(items.length, 4),
+          items: items.slice(0, 4),
         });
       }
 
@@ -212,15 +214,17 @@ async function loadHome(): Promise<MovieBoxHomeResponse> {
     if (items.length) {
       sections.push({
         section: title,
-        count: items.length,
-        items,
+        count: Math.min(items.length, HOME_ITEMS_PER_SECTION),
+        items: items.slice(0, HOME_ITEMS_PER_SECTION),
       });
     }
+
+    if (sections.length >= HOME_MAX_SECTIONS) break;
   }
 
   return {
     status: "success",
-    sections,
+    sections: sections.slice(0, HOME_MAX_SECTIONS),
   };
 }
 

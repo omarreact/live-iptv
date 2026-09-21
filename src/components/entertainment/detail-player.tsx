@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Captions,
@@ -11,7 +12,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AdaptivePlayer } from "@/components/media/adaptive-player";
 import type { MediaDetail } from "@/types/catalog";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,23 @@ export function EntertainmentDetailPlayer({
   detail: MediaDetail;
   closeHref: string;
 }) {
+  const router = useRouter();
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") router.push(closeHref, { scroll: false });
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [closeHref, router]);
+
   const initialSeason =
     detail.playback?.defaultSeason ?? detail.seasons[0]?.number ?? 1;
   const [season, setSeason] = useState(initialSeason);
@@ -107,13 +125,21 @@ export function EntertainmentDetailPlayer({
         className="absolute inset-0"
       />
 
-      <section className="relative z-10 flex max-h-[96dvh] w-full max-w-6xl flex-col overflow-hidden rounded-t-[28px] border border-white/10 bg-[#0b0b0d] shadow-2xl shadow-black/60 sm:max-h-[92dvh] sm:rounded-[28px]">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pinflix-entertainment-dialog-title"
+        className="relative z-10 flex max-h-[96dvh] w-full max-w-6xl flex-col overflow-hidden rounded-t-[28px] border border-white/10 bg-[#0b0b0d] shadow-2xl shadow-black/60 sm:max-h-[92dvh] sm:rounded-[28px]"
+      >
         <header className="sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-white/10 bg-[#0b0b0d]/92 px-4 py-3 backdrop-blur-xl sm:px-6">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand">
               Pinflix Entertainment
             </p>
-            <h2 className="mt-0.5 truncate text-base font-bold text-white sm:text-lg">
+            <h2
+              id="pinflix-entertainment-dialog-title"
+              className="mt-0.5 truncate text-base font-bold text-white sm:text-lg"
+            >
               {detail.title}
             </h2>
           </div>

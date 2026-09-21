@@ -500,8 +500,8 @@ export function AdaptivePlayer({
     const video = videoRef.current;
     if (!video) return;
 
-    Array.from(video.textTracks).forEach((track, index) => {
-      track.mode = index === subtitleIndex ? "showing" : "disabled";
+    Array.from(video.textTracks).forEach((track) => {
+      track.mode = subtitleIndex >= 0 ? "showing" : "disabled";
     });
   }, [sourceIndex, subtitleIndex, result.subtitles]);
 
@@ -629,15 +629,16 @@ export function AdaptivePlayer({
           poster={poster}
           className="size-full bg-black object-contain"
         >
-          {result.subtitles.map((subtitle) => (
+          {subtitleIndex >= 0 && result.subtitles[subtitleIndex] ? (
             <track
-              key={`${subtitle.language}-${subtitle.url}`}
+              key={`${result.subtitles[subtitleIndex].language}-${result.subtitles[subtitleIndex].url}`}
               kind="subtitles"
-              src={subtitle.url}
-              srcLang={subtitle.language}
-              label={subtitle.label}
+              src={result.subtitles[subtitleIndex].url}
+              srcLang={result.subtitles[subtitleIndex].language}
+              label={result.subtitles[subtitleIndex].label}
+              default
             />
-          ))}
+          ) : null>
         </video>
 
         <PlayerStateOverlay

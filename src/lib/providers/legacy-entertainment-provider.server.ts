@@ -75,6 +75,12 @@ function captionUrl(caption: MovieBoxCaption): string | null {
   );
 }
 
+function normalizeSubtitleLanguage(value: string): string {
+  const normalized = value.trim().replace(/_/g, "-");
+  if (normalized.toLowerCase() === "in-id") return "id";
+  return normalized || "en";
+}
+
 function qualityValue(value?: string): number {
   const match = String(value ?? "").match(/\d+/);
   return match ? Number(match[0]) : 0;
@@ -142,11 +148,12 @@ export const legacyEntertainmentProvider: PlaybackProvider = {
       const url = captionUrl(caption);
       if (!url) return [];
 
-      const language =
+      const language = normalizeSubtitleLanguage(
         asString(caption.language) ??
-        asString(caption.lang) ??
-        asString(caption.lan) ??
-        "en";
+          asString(caption.lang) ??
+          asString(caption.lan) ??
+          "en",
+      );
 
       return [
         {

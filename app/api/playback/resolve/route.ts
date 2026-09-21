@@ -33,6 +33,24 @@ function proxyHref(
   return `/api/playback/proxy?${params.toString()}`;
 }
 
+function subtitleHref(
+  providerId: string,
+  input: ResolvePlaybackInput,
+  subtitleIndex: number,
+): string {
+  const params = new URLSearchParams({
+    provider: providerId,
+    id: input.id,
+    subtitle: String(subtitleIndex),
+  });
+
+  if (input.slug) params.set("slug", input.slug);
+  if (input.season !== undefined) params.set("season", String(input.season));
+  if (input.episode !== undefined) params.set("episode", String(input.episode));
+
+  return `/api/playback/subtitle?${params.toString()}`;
+}
+
 function browserSource(
   source: PlaybackSource,
   url = source.url,
@@ -89,7 +107,10 @@ function toBrowserResult(
   return {
     title: result.title,
     sources,
-    subtitles: result.subtitles,
+    subtitles: result.subtitles.map((subtitle, subtitleIndex) => ({
+      ...subtitle,
+      url: subtitleHref(providerId, input, subtitleIndex),
+    })),
     ...(warnings.length ? { warnings: [...new Set(warnings)] } : {}),
   };
 }
@@ -100,9 +121,15 @@ export async function GET(request: Request) {
   const id = searchParams.get("id") ?? "";
   const slug = searchParams.get("slug") ?? undefined;
 
-  if (!providerId || !id) {
+  if (
+    !providerId ||
+    !id ||
+    providerId.length > 64 ||
+    id.length > 256 ||
+    (slug && slug.length > 512)
+  ) {
     return Response.json(
-      { error: "provider and id are required" },
+      { error: "Invalid playback request" },
       { status: 400 },
     );
   }

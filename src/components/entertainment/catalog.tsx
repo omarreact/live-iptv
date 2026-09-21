@@ -254,6 +254,13 @@ export function EntertainmentHeader({
             </div>
           </Link>
 
+          <Link
+            href="/"
+            className="hidden shrink-0 rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted transition hover:border-border-strong hover:text-fg md:inline-flex"
+          >
+            Live TV
+          </Link>
+
           <form
             action="/entertainment"
             method="get"

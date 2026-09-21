@@ -2,6 +2,7 @@ import "server-only";
 
 import { recordStreamFailure, recordStreamSuccess } from "./health";
 import { assertSafeUrl } from "./proxy.server";
+import { resolveViewerLocationWithIpFallback } from "../viewer-location";
 import {
   openPrivateTarget,
   resolvePrivateTarget,
@@ -160,6 +161,14 @@ export function isPrivateProxyRequest(request: Request): boolean {
 
 export async function proxyPrivateStream(request: Request): Promise<Response> {
   const incoming = new URL(request.url);
+  const location = await resolveViewerLocationWithIpFallback(request.headers);
+
+  if (location.country !== "BD") {
+    return new Response("Private stream is unavailable in this region", {
+      status: 403,
+      headers: { "cache-control": "private, no-store" },
+    });
+  }
 
   let context: PrivateContext;
   let resolved: ResolvedPrivateTarget;
