@@ -114,8 +114,7 @@ function PosterCard({
 
   return (
     <Link
-      href={paramsHref(context, { detail: item.detailKey })}
-      scroll={false}
+      href={`/entertainment/${encodeURIComponent(item.detailKey)}`}
       className="group min-w-0 text-left"
     >
       {content}
@@ -150,7 +149,9 @@ function Hero({
   item: MediaItem;
   context: CatalogContext;
 }) {
-  const href = item.detailKey ? paramsHref(context, { detail: item.detailKey }) : null;
+  const href = item.detailKey
+    ? `/entertainment/${encodeURIComponent(item.detailKey)}`
+    : null;
 
   return (
     <section className="relative mb-8 overflow-hidden rounded-2xl border border-border bg-surface">
@@ -190,7 +191,6 @@ function Hero({
           {href ? (
             <Link
               href={href}
-              scroll={false}
               className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:scale-[1.02]"
             >
               <Play className="size-4 fill-current" />
