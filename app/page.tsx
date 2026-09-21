@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { unstable_cache } from "next/cache";
 import { headers } from "next/headers";
 import { ChannelRow } from "@/components/channel-row";
+import { HotNow } from "@/components/hot-now";
 import { RecentRow } from "@/components/recent-row";
 import { getBangladeshPrivatePreviews } from "@/lib/iptv/private-channels";
 import { getHomeData } from "@/lib/iptv/provider/iptv-org";
@@ -51,7 +52,9 @@ export default async function HomePage() {
       </section>
 
       <div className="mx-auto max-w-[1400px] space-y-9">
-<RecentRow />
+        <HotNow country={country} />
+
+        <RecentRow />
 
         {localChannels.length > 0 ? (
           <ChannelRow
