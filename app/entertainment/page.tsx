@@ -1,103 +1,223 @@
-import Image from "next/image";
-import { ExternalLink, Film, Search } from "lucide-react";
-import { getEntertainmentHome } from "@/lib/entertainment";
+import {
+  EntertainmentCatalog,
+  EntertainmentHeader,
+  EntertainmentHome,
+  EntertainmentSearchResults,
+  type EntertainmentView,
+} from "@/components/entertainment/catalog";
+import { EntertainmentDetailPlayer } from "@/components/entertainment/detail-player";
+import {
+  normalizeMovieBoxCatalog,
+  normalizeMovieBoxHome,
+  normalizeMovieBoxItem,
+  normalizeMovieBoxMediaDetail,
+} from "@/lib/media/normalize-moviebox";
+import { normalizeMovieBoxDetail } from "@/lib/moviebox/normalize";
+import {
+  getAnimation,
+  getDetail,
+  getHome,
+  getMovies,
+  getTvSeries,
+  search,
+} from "@/lib/moviebox/service";
+import type {
+  MovieBoxCategoryResponse,
+  MovieBoxItem,
+} from "@/lib/moviebox/types";
+import type { MediaDetail } from "@/types/catalog";
 
-export const revalidate = 900;
+export const dynamic = "force-dynamic";
 
-export default async function EntertainmentPage() {
-  const data = await getEntertainmentHome().catch(() => ({ titles: [], providers: [] as string[] }));
+export const metadata = {
+  title: "Entertainment",
+  description: "Browse movies, TV series, animation, and available playback on Pinflix.",
+};
+
+type SearchParams = Promise<
+  Record<string, string | string[] | undefined>
+>;
+
+function first(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function parseView(value: string): EntertainmentView {
+  return value === "movies" ||
+    value === "series" ||
+    value === "animation"
+    ? value
+    : "home";
+}
+
+function parsePage(value: string): number {
+  const page = Number.parseInt(value, 10);
+  return Number.isFinite(page) && page > 0 ? page : 1;
+}
+
+function closeHref({
+  view,
+  query,
+  page,
+}: {
+  view: EntertainmentView;
+  query: string;
+  page: number;
+}): string {
+  const params = new URLSearchParams();
+
+  if (view !== "home") params.set("view", view);
+  if (query) params.set("q", query);
+  if (page > 1) params.set("page", String(page));
+
+  const value = params.toString();
+  return value ? `/entertainment?${value}` : "/entertainment";
+}
+
+function findItem(
+  items: MovieBoxItem[],
+  slug: string,
+): MovieBoxItem | null {
+  return items.find((item) => item.slug === slug) ?? null;
+}
+
+function fallbackDetail(
+  item: MovieBoxItem,
+  slug: string,
+): MediaDetail {
+  const base = normalizeMovieBoxItem(item);
+  const playback =
+    item.subject_id !== null && item.subject_id !== undefined
+      ? {
+          provider: "moviebox",
+          id: String(item.subject_id),
+          slug,
+          defaultSeason: 1,
+          defaultEpisode: 1,
+        }
+      : null;
+
+  return {
+    ...base,
+    detailKey: slug,
+    overview:
+      "Full title details are temporarily unavailable. You can still retry playback if a stream reference is available.",
+    genres: [],
+    trailer: null,
+    seasons: [],
+    playback,
+  };
+}
+
+export default async function EntertainmentPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+  const view = parseView(first(params.view));
+  const query = first(params.q).trim().slice(0, 120);
+  const page = parsePage(first(params.page));
+  const detailSlug = first(params.detail).trim().slice(0, 512);
+
+  const context = { view, query, page };
+
+  let visibleItems: MovieBoxItem[];
+  let home = null;
+  let catalog: MovieBoxCategoryResponse | null = null;
+
+  if (query) {
+    const result = await search(query, page);
+    catalog = {
+      page,
+      per_page: 24,
+      total: result.total,
+      items: result.items,
+    };
+    visibleItems = result.items;
+  } else if (view === "home") {
+    home = await getHome();
+    visibleItems = home.sections.flatMap((section) => section.items);
+  } else if (view === "movies") {
+    catalog = await getMovies(page);
+    visibleItems = catalog.items;
+  } else if (view === "series") {
+    catalog = await getTvSeries(page);
+    visibleItems = catalog.items;
+  } else {
+    catalog = await getAnimation(page);
+    visibleItems = catalog.items;
+  }
+
+  let detail: MediaDetail | null = null;
+
+  if (detailSlug) {
+    const fallback =
+      findItem(visibleItems, detailSlug) ??
+      ({
+        name: "Entertainment title",
+        poster_url: null,
+        slug: detailSlug,
+        subject_id: null,
+        kind: "mixed",
+      } satisfies MovieBoxItem);
+
+    try {
+      detail = normalizeMovieBoxMediaDetail(
+        normalizeMovieBoxDetail(
+          await getDetail(detailSlug),
+          fallback,
+        ),
+        fallback,
+      );
+    } catch (error: unknown) {
+      console.error("[entertainment] detail failed", error);
+      detail = fallbackDetail(fallback, detailSlug);
+    }
+  }
+
+  const heading =
+    view === "movies"
+      ? "Movies"
+      : view === "series"
+        ? "TV Series"
+        : "Animation";
 
   return (
-    <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <header className="max-w-2xl">
-        <div className="flex items-center gap-2 text-brand">
-          <Film className="size-5" />
-          <span className="text-xs font-semibold uppercase tracking-[0.16em]">Entertainment</span>
-        </div>
-        <h1 className="mt-2 text-3xl font-bold tracking-[-0.035em] sm:text-4xl">
-          Movies & Series
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Discover movies and web series from multiple catalog sources in one place.
-        </p>
-      </header>
+    <div className="min-h-dvh bg-bg text-fg">
+      <EntertainmentHeader context={context} />
 
-      <form action="/search" method="get" className="relative mt-6 max-w-2xl">
-        <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted" />
-        <input
-          type="search"
-          name="q"
-          placeholder="Search Pinflix"
-          aria-label="Search Pinflix"
-          className="h-11 w-full rounded-xl border border-border bg-surface pl-11 pr-4 text-sm outline-none transition-colors placeholder:text-subtle hover:border-border-strong focus:border-brand focus:ring-2 focus:ring-brand/15"
-        />
-      </form>
-
-      <div className="mt-5 flex flex-wrap gap-2 text-xs text-muted">
-        {data.providers.map((provider) => (
-          <span key={provider} className="rounded-full border border-border bg-surface px-3 py-1.5">
-            {provider}
-          </span>
-        ))}
-      </div>
-
-      {data.titles.length ? (
-        <section className="mt-9">
-          <h2 className="text-xl font-semibold">Trending & Popular</h2>
-          <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {data.titles.map((item) => (
-              <a
-                key={item.id}
-                href={item.href}
-                target="_blank"
-                rel="noreferrer"
-                className="group tv-focus rounded-xl"
-              >
-                <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface transition-colors group-hover:border-border-strong">
-                  {item.image ? (
-                    <Image
-                      src={item.image}
-                      alt=""
-                      fill
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 220px"
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Film className="size-8 text-subtle" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-2.5 min-w-0">
-                  <div className="flex items-start gap-1.5">
-                    <p className="line-clamp-2 flex-1 text-sm font-medium leading-5">{item.title}</p>
-                    <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-subtle" />
-                  </div>
-                  <p className="mt-1 text-xs text-muted">
-                    {item.mediaType === "movie" ? "Movie" : "Series"}
-                    {item.year ? ` · ${item.year}` : ""}
-                    {item.rating ? ` · ★ ${item.rating.toFixed(1)}` : ""}
-                  </p>
-                </div>
-              </a>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <section className="mt-10 rounded-xl border border-border bg-surface p-6">
-          <p className="font-medium">Entertainment catalog is temporarily unavailable.</p>
-          <p className="mt-1 text-sm text-muted">
-            Pinflix will keep Live TV available even when entertainment providers are unavailable.
+      <main className="mx-auto max-w-[1500px] px-4 pb-24 pt-5 sm:px-6 lg:px-8">
+        {query && catalog ? (
+          <EntertainmentSearchResults
+            query={query}
+            catalog={normalizeMovieBoxCatalog(catalog)}
+            context={context}
+          />
+        ) : view === "home" && home ? (
+          <EntertainmentHome
+            home={normalizeMovieBoxHome(home)}
+            context={context}
+          />
+        ) : catalog ? (
+          <EntertainmentCatalog
+            title={heading}
+            catalog={normalizeMovieBoxCatalog(catalog)}
+            context={context}
+          />
+        ) : (
+          <p className="py-20 text-center text-muted">
+            Entertainment is unavailable right now.
           </p>
-        </section>
-      )}
+        )}
+      </main>
 
-      <footer className="mt-12 border-t border-border pt-6 text-xs leading-5 text-subtle">
-        Pinflix indexes metadata and availability sources; copyrighted movies and series are not
-        re-hosted by Pinflix. Playback should use official, licensed, public-domain, or authorized
-        sources.
-      </footer>
-    </main>
+      {detail ? (
+        <EntertainmentDetailPlayer
+          detail={detail}
+          closeHref={closeHref(context)}
+        />
+      ) : null}
+    </div>
   );
 }
