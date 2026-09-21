@@ -2,6 +2,10 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import { movieboxRequest, normalizeItem } from "./client";
+import {
+  extractPlayInfoHeaders,
+  resolvePlayInfoUrl,
+} from "./play-info.server";
 import type {
   MovieBoxCaption,
   MovieBoxCaptionResponse,
@@ -62,6 +66,7 @@ type UpstreamPlayerStream = {
   size?: string | number;
   duration?: number;
   codecName?: string;
+  headers?: Record<string, string>;
 };
 
 type PlayerData = {
@@ -492,17 +497,18 @@ function normalizePlayerStream(
   const record = asRecord(value);
   if (!record) return null;
 
-  const url = asString(record.url);
+  const url = resolvePlayInfoUrl(record, record.format ?? record.type);
 
   return {
     id: asStringOrNumber(record.id) ?? undefined,
     url: url ?? undefined,
     resolutions:
       asStringOrNumber(record.resolutions) ?? undefined,
-    format: asString(record.format) ?? undefined,
+    format: asString(record.format) ?? asString(record.type) ?? undefined,
     size: asStringOrNumber(record.size) ?? undefined,
     duration: asFiniteNumber(record.duration) ?? undefined,
     codecName: asString(record.codecName) ?? undefined,
+    headers: extractPlayInfoHeaders(record),
   };
 }
 
@@ -603,6 +609,7 @@ function normalizeStreamData(
       size: stream.size,
       duration: stream.duration,
       codec: stream.codecName,
+      headers: stream.headers,
     }));
 
   const hasResource =
