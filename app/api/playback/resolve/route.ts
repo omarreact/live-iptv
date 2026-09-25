@@ -44,6 +44,24 @@ function subtitleHref(
   return `/api/playback/subtitle?${params.toString()}`;
 }
 
+function cineplexEdgeUrl(rawUrl: string): string {
+  const url = new URL(rawUrl);
+  const host = url.hostname.toLowerCase();
+  const isCineplex =
+    host === "cineplexbd.net" ||
+    host === "www.cineplexbd.net" ||
+    host === "vod.cineplexbd.net";
+
+  if (!isCineplex || url.protocol !== "http:") return rawUrl;
+
+  const edgeBase =
+    process.env.CINEPLEX_MEDIA_EDGE_BASE?.trim() ||
+    "https://media.pincodeit.com";
+  const edge = new URL("/proxy", edgeBase);
+  edge.searchParams.set("url", url.href);
+  return edge.href;
+}
+
 function browserSource(
   source: PlaybackSource,
   url = source.url,
@@ -67,7 +85,7 @@ function toBrowserResult(
 
     let safeDirectUrl: string;
     try {
-      safeDirectUrl = assertSafeUrl(source.url).href;
+      safeDirectUrl = cineplexEdgeUrl(assertSafeUrl(source.url).href);
     } catch {
       warnings.push("An unsafe playback source was withheld.");
       return [];
