@@ -74,7 +74,7 @@ async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}/${path}`, {
     headers: { accept: "application/json" },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    next: { revalidate: REVALIDATE },
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`iptv-org ${path} failed: ${res.status} ${res.statusText}`);
