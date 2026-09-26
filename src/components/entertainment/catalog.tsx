@@ -66,7 +66,7 @@ function titleMeta(item: MediaItem): string {
 function PosterCard({ item }: { item: MediaItem }) {
   const content = (
     <>
-      <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition duration-200 group-hover:-translate-y-1 group-hover:border-border-strong group-hover:shadow-xl">
+      <div className="relative aspect-[2/3] overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_10px_28px_rgba(15,23,42,.07)] transition duration-200 group-hover:-translate-y-1 group-hover:border-border-strong group-hover:shadow-[0_18px_42px_rgba(15,23,42,.12)]">
         {item.poster ? (
           <img
             src={item.poster}
@@ -85,12 +85,12 @@ function PosterCard({ item }: { item: MediaItem }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/5 to-transparent" />
 
         {item.badge ? (
-          <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur">
+          <span className="absolute left-2 top-2 rounded-full bg-orange-500 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
             {item.badge}
           </span>
         ) : null}
 
-        <span className="absolute bottom-3 right-3 flex size-10 translate-y-2 items-center justify-center rounded-full bg-white text-black opacity-0 shadow-xl transition group-hover:translate-y-0 group-hover:opacity-100">
+        <span className="absolute bottom-3 right-3 flex size-10 translate-y-2 items-center justify-center rounded-full bg-brand text-white opacity-0 shadow-lg shadow-brand/20 transition group-hover:translate-y-0 group-hover:opacity-100">
           <Play className="size-4 fill-current" />
         </span>
       </div>
@@ -135,20 +135,20 @@ function Hero({ item }: { item: MediaItem }) {
     : null;
 
   return (
-    <section className="relative mb-8 overflow-hidden rounded-2xl border border-border bg-surface">
+    <section className="relative mb-9 overflow-hidden rounded-[28px] border border-border bg-white shadow-[0_18px_55px_rgba(15,23,42,.08)]">
       {item.poster ? (
         <img
           src={item.poster}
           alt=""
           referrerPolicy="no-referrer"
-          className="absolute inset-0 size-full scale-110 object-cover opacity-35 blur-2xl"
+          className="absolute inset-0 size-full scale-110 object-cover opacity-20 blur-2xl"
         />
       ) : null}
 
-      <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/90 to-bg/45" />
+      <div className="absolute inset-0 bg-gradient-to-r from-white via-white/94 to-white/65" />
 
       <div className="relative grid min-h-[330px] items-center gap-8 p-6 sm:grid-cols-[180px_1fr] sm:p-8 lg:min-h-[390px] lg:grid-cols-[220px_1fr] lg:p-10">
-        <div className="mx-auto aspect-[2/3] w-[160px] overflow-hidden rounded-xl border border-white/10 bg-surface shadow-2xl sm:w-full">
+        <div className="mx-auto aspect-[2/3] w-[160px] overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_20px_45px_rgba(15,23,42,.16)] sm:w-full">
           {item.poster ? (
             <img
               src={item.poster}
@@ -172,7 +172,7 @@ function Hero({ item }: { item: MediaItem }) {
           {href ? (
             <Link
               href={href}
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:scale-[1.02]"
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-brand/20 transition hover:-translate-y-0.5 hover:bg-brand-strong"
             >
               <Play className="size-4 fill-current" />
               View details
@@ -219,74 +219,51 @@ export function EntertainmentHeader({
 }: {
   context: CatalogContext;
 }) {
-  return (
-    <header className="sticky top-0 z-30 border-b border-border bg-bg/95 backdrop-blur-md">
-      <div className="mx-auto max-w-[1500px] px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <Link href="/entertainment" className="flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-brand font-black text-white">
-              P
-            </span>
-            <div className="hidden text-left sm:block">
-              <p className="text-sm font-black tracking-[0.12em]">PINFLIX</p>
-              <p className="text-[10px] text-muted">Entertainment</p>
-            </div>
-          </Link>
-
-          <Link
-            href="/"
-            className="hidden shrink-0 rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted transition hover:border-border-strong hover:text-fg md:inline-flex"
-          >
-            Live TV
-          </Link>
-
-          <form
-            action="/entertainment"
-            method="get"
-            className="ml-auto flex w-full max-w-xl items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5"
-          >
-            <Search className="size-4 shrink-0 text-muted" />
-            <input
-              type="search"
-              name="q"
-              defaultValue={context.query}
-              placeholder="Search movies, series, anime…"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-subtle"
-            />
-          </form>
+  if (context.query) {
+    return (
+      <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-border bg-white px-4 py-3 shadow-sm">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand">Search mode</p>
+          <p className="mt-0.5 text-sm text-muted">Results across movies, TV shows and animation</p>
         </div>
-
-        {!context.query ? (
-          <nav className="hide-scrollbar mt-3 flex gap-1 overflow-x-auto">
-            {VIEWS.map((entry) => {
-              const Icon = entry.icon;
-              const active = context.view === entry.id;
-
-              return (
-                <Link
-                  key={entry.id}
-                  href={paramsHref(context, {
-                    view: entry.id,
-                    query: null,
-                    page: null,
-                    detail: null,
-                  })}
-                  className={cn(
-                    "flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold transition",
-                    active
-                      ? "bg-white text-black"
-                      : "text-muted hover:bg-surface hover:text-fg",
-                  )}
-                >
-                  <Icon className="size-4" />
-                  {entry.label}
-                </Link>
-              );
-            })}
-          </nav>
-        ) : null}
+        <Link
+          href="/entertainment"
+          className="shrink-0 rounded-full border border-border bg-elevated px-3 py-2 text-xs font-bold text-muted transition hover:bg-white hover:text-fg"
+        >
+          Clear
+        </Link>
       </div>
-    </header>
+    );
+  }
+
+  return (
+    <nav className="hide-scrollbar mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-border bg-white p-2 shadow-sm">
+      {VIEWS.map((entry) => {
+        const Icon = entry.icon;
+        const active = context.view === entry.id;
+
+        return (
+          <Link
+            key={entry.id}
+            href={paramsHref(context, {
+              view: entry.id,
+              query: null,
+              page: null,
+              detail: null,
+            })}
+            className={cn(
+              "flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+              active
+                ? "bg-brand-soft text-brand shadow-sm"
+                : "text-muted hover:bg-elevated hover:text-fg",
+            )}
+          >
+            <Icon className="size-4" />
+            {entry.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -301,7 +278,7 @@ export function EntertainmentHome({
   return (
     <>
       {home.status === "error" ? (
-        <p className="mb-5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <p className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {home.error ?? "Entertainment is unavailable right now."}
         </p>
       ) : null}
