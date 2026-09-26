@@ -21,12 +21,7 @@ async function fetchHtml(url: URL): Promise<string> {
       signal: AbortSignal.timeout(15_000),
     });
 
-  let response: Response | null = null;
-  try {
-    response = await run(url.href);
-  } catch {
-    response = null;
-  }
+  let response = await run(url.href).catch(() => null);
 
   if (!response?.ok) {
     const edge = new URL("/proxy", EDGE);
