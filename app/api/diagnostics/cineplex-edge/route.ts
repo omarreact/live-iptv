@@ -7,6 +7,11 @@ async function probe(url: string, timeoutMs: number) {
       cache: "no-store",
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36",
+        referer: "http://cineplexbd.net/",
+      },
     });
     return {
       ok: response.ok || (response.status >= 300 && response.status < 400),
@@ -31,22 +36,26 @@ export async function GET() {
 
   const health = await probe(edge + "/health", 10000);
 
-  const port80 = new URL("/proxy", edge);
-  port80.searchParams.set("url", "http://cineplexbd.net/");
+  const edge80 = new URL("/proxy", edge);
+  edge80.searchParams.set("url", "http://cineplexbd.net/");
 
-  const port8081 = new URL("/proxy", edge);
-  port8081.searchParams.set("url", "http://vod.cineplexbd.net:8081/");
+  const edge8081 = new URL("/proxy", edge);
+  edge8081.searchParams.set("url", "http://vod.cineplexbd.net:8081/");
 
-  const [web80, vod8081] = await Promise.all([
-    probe(port80.href, 15000),
-    probe(port8081.href, 15000),
+  const [direct80, direct8081, proxied80, proxied8081] = await Promise.all([
+    probe("http://cineplexbd.net/", 12000),
+    probe("http://vod.cineplexbd.net:8081/", 12000),
+    probe(edge80.href, 15000),
+    probe(edge8081.href, 15000),
   ]);
 
   return Response.json({
     testedAt: new Date().toISOString(),
     edge,
     health,
-    web80,
-    vod8081,
+    direct80,
+    direct8081,
+    proxied80,
+    proxied8081,
   });
 }
