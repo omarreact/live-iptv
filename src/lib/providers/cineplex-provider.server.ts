@@ -106,24 +106,35 @@ export const cineplexProvider: PlaybackProvider = {
       };
     }
 
-    const source = transformVodUrl(raw);
-    const protocol = protocolFor(source);
+    const directSource = new URL(raw, BASE).href;
+    const transformedSource = transformVodUrl(raw);
+    const sourceUrls =
+      transformedSource === directSource
+        ? [directSource]
+        : [directSource, transformedSource];
 
     return {
       title: kind === "series" ? `CineplexBD Series ${id}` : `CineplexBD Movie ${id}`,
-      sources: [
-        {
+      sources: sourceUrls.map((source, index) => {
+        const protocol = protocolFor(source);
+
+        return {
           url: source,
           protocol,
-          quality: protocol === "hls" ? "Auto" : undefined,
+          quality:
+            index === 0
+              ? protocol === "hls"
+                ? "Direct network"
+                : "Direct"
+              : "Cineplex mirror",
           mimeType:
             protocol === "hls"
               ? "application/vnd.apple.mpegurl"
               : protocol === "dash"
                 ? "application/dash+xml"
                 : "video/mp4",
-        },
-      ],
+        };
+      }),
       subtitles: [],
     };
   },
