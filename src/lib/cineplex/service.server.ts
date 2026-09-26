@@ -79,12 +79,7 @@ async function fetchText(url: URL): Promise<{ text: string; finalUrl: string }> 
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
-  let response: Response | null = null;
-  try {
-    response = await direct(url.href);
-  } catch {
-    response = null;
-  }
+  let response = await direct(url.href).catch(() => null);
 
   if (!response?.ok) {
     const edge = new URL("/proxy", EDGE);
@@ -309,12 +304,9 @@ async function seriesSeasons(id: string, html: string): Promise<MediaSeason[]> {
     meta.searchParams.set("season", String(season));
     meta.searchParams.set("meta", "1");
 
-    let episodeCount = 1;
-    try {
-      episodeCount = episodeCountFromMeta(await fetchJson(meta));
-    } catch {
-      episodeCount = 1;
-    }
+    const episodeCount = await fetchJson(meta)
+      .then(episodeCountFromMeta)
+      .catch(() => 1);
     out.push({ number: season, episodeCount });
   }
 
