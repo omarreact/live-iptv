@@ -1,4 +1,4 @@
-import { EntertainmentDetailPlayer } from "@/components/entertainment/detail-player";
+import { EntertainmentDetailPlayer } from "@/components/entertainment/detail-player";\nimport { getCineplexDetail, isCineplexDetailKey } from "@/lib/cineplex/service.server";
 import {
   normalizeMovieBoxItem,
   normalizeMovieBoxMediaDetail,
@@ -54,10 +54,14 @@ export default async function EntertainmentTitlePage({
   let detail: MediaDetail;
 
   try {
-    detail = normalizeMovieBoxMediaDetail(
-      normalizeMovieBoxDetail(await getDetail(slug), fallback),
-      fallback,
-    );
+    if (isCineplexDetailKey(slug)) {
+      detail = await getCineplexDetail(slug);
+    } else {
+      detail = normalizeMovieBoxMediaDetail(
+        normalizeMovieBoxDetail(await getDetail(slug), fallback),
+        fallback,
+      );
+    }
   } catch (error: unknown) {
     console.error("[entertainment.detail] failed", error);
     detail = fallbackDetail(fallback, slug);
