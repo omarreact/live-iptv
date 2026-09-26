@@ -152,13 +152,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Bookmark className="size-4" />
             </Link>
 
-            <Link
-              href="/search"
-              className="tv-focus flex size-10 items-center justify-center rounded-xl text-muted hover:bg-elevated hover:text-fg md:hidden"
-              aria-label="Search"
-            >
-              <Search className="size-5" />
-            </Link>
+            {!entertainmentListing ? (
+              <Link
+                href="/search"
+                className="tv-focus flex size-10 items-center justify-center rounded-xl text-muted hover:bg-elevated hover:text-fg md:hidden"
+                aria-label="Search"
+              >
+                <Search className="size-5" />
+              </Link>
+            ) : null}
           </div>
         </header>
 
