@@ -3,7 +3,6 @@ import {
   Clapperboard,
   Home,
   Play,
-  Search,
   Sparkles,
   Tv,
 } from "lucide-react";
