@@ -1,12 +1,14 @@
 import "server-only";
 
-import { authorizedProvider } from "./authorized-provider.server";\nimport { cineplexProvider } from "./cineplex-provider.server";
+import { authorizedProvider } from "./authorized-provider.server";
+import { cineplexProvider } from "./cineplex-provider.server";
 import { legacyEntertainmentProvider } from "./legacy-entertainment-provider.server";
 import type { PlaybackProvider } from "./types";
 
 const providers = new Map<string, PlaybackProvider>([
   [legacyEntertainmentProvider.id, legacyEntertainmentProvider],
-  [authorizedProvider.id, authorizedProvider],\n  [cineplexProvider.id, cineplexProvider],
+  [authorizedProvider.id, authorizedProvider],
+  [cineplexProvider.id, cineplexProvider],
 ]);
 
 export function getPlaybackProvider(id: string): PlaybackProvider {
