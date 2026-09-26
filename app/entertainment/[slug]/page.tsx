@@ -1,4 +1,8 @@
-import { EntertainmentDetailPlayer } from "@/components/entertainment/detail-player";\nimport { getCineplexDetail, isCineplexDetailKey } from "@/lib/cineplex/service.server";
+import { EntertainmentDetailPlayer } from "@/components/entertainment/detail-player";
+import {
+  getCineplexDetail,
+  isCineplexDetailKey,
+} from "@/lib/cineplex/service.server";
 import {
   normalizeMovieBoxItem,
   normalizeMovieBoxMediaDetail,
