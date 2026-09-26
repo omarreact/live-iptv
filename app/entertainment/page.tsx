@@ -85,9 +85,18 @@ export default async function EntertainmentPage({
 
   return (
     <div className="min-h-dvh bg-bg text-fg">
-      <EntertainmentHeader context={context} />
+      <main className="mx-auto max-w-[1500px] px-4 pb-24 pt-6 sm:px-6 sm:pt-8 lg:px-8">
+        <div className="mb-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand">Pinflix Entertainment</p>
+          <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-fg sm:text-4xl">
+            Find something worth watching
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+            Movies, TV shows and animation in a cleaner browsing experience with faster filters and dedicated playback pages.
+          </p>
+        </div>
 
-      <main className="mx-auto max-w-[1500px] px-4 pb-24 pt-5 sm:px-6 lg:px-8">
+        <EntertainmentHeader context={context} />
         {query && catalog ? (
           <EntertainmentSearchResults
             query={query}
