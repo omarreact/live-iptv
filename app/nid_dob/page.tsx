@@ -29,6 +29,8 @@ export default function NidDobPage() {
   const [dob, setDob] = useState("");
   const [consent, setConsent] = useState(false);
   const [formMessage, setFormMessage] = useState("");
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<Record<string, unknown> | null>(null);
 
   async function refreshStatus() {
     setStatusError("");
@@ -115,22 +117,64 @@ export default function NidDobPage() {
     setIdentifier("");
     setDob("");
     setConsent(false);
+    setVerificationResult(null);
   }
 
-  function submitVerification(event: FormEvent) {
+  async function submitVerification(event: FormEvent) {
     event.preventDefault();
     setFormMessage("");
+    setVerificationResult(null);
+    setVerificationBusy(true);
 
-    if (!status?.ready) {
-      setFormMessage(
-        "The page is working, but the authorized verification provider is not ready on this deployment. Configure the server-side Porichoy production credential and provider connectivity first.",
-      );
-      return;
+    const endpoint = mode === "nid" ? "/api/nid-dob/nid" : "/api/nid-dob/birth";
+    const payload =
+      mode === "nid"
+        ? {
+            nidNumber: identifier,
+            dateOfBirth: dob,
+            authorizedUse: consent,
+          }
+        : {
+            birthRegistrationNumber: identifier,
+            dateOfBirth: dob,
+            authorizedUse: consent,
+          };
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        cache: "no-store",
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json().catch(() => ({
+        ok: false,
+        error: `Verification endpoint returned HTTP ${response.status}.`,
+      }))) as Record<string, unknown>;
+
+      setVerificationResult(data);
+
+      if (!response.ok || data.ok !== true) {
+        setFormMessage(
+          typeof data.error === "string"
+            ? data.error
+            : `Verification failed with HTTP ${response.status}.`,
+        );
+      } else {
+        setFormMessage("");
+      }
+
+      void refreshStatus();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Verification request could not be completed.";
+      setFormMessage(message);
+      setVerificationResult({ ok: false, error: message });
+    } finally {
+      setVerificationBusy(false);
     }
-
-    setFormMessage(
-      "The authorized provider is reachable. The production lookup route is intentionally not exposed until the server-side verification credential and permitted response fields are confirmed.",
-    );
   }
 
   if (authenticated === null) {
@@ -250,6 +294,8 @@ export default function NidDobPage() {
                   setMode("nid");
                   setIdentifier("");
                   setFormMessage("");
+                  setVerificationResult(null);
+                  setVerificationResult(null);
                 }}
                 className={`rounded-2xl px-4 py-3 text-left text-sm font-extrabold transition ${
                   mode === "nid" ? "bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500"
@@ -319,11 +365,42 @@ export default function NidDobPage() {
 
               <button
                 type="submit"
-                disabled={!identifier || !dob || !consent}
+                disabled={!identifier || !dob || !consent || verificationBusy}
                 className="h-12 w-full rounded-2xl bg-emerald-700 font-extrabold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45"
               >
-                {mode === "nid" ? "Check NID" : "Check Birth Registration"}
+                {verificationBusy
+                  ? "Checking live provider…"
+                  : mode === "nid"
+                    ? "Check NID"
+                    : "Check Birth Registration"}
               </button>
+
+              {verificationResult ? (
+                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-slate-100">
+                  <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-[.12em] text-slate-400">
+                        Live provider response
+                      </div>
+                      <div className="mt-1 text-xs font-bold">
+                        {verificationResult.ok === true ? "Request succeeded" : "Request failed"}
+                      </div>
+                    </div>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                        verificationResult.ok === true
+                          ? "bg-emerald-500/15 text-emerald-300"
+                          : "bg-red-500/15 text-red-300"
+                      }`}
+                    >
+                      {verificationResult.ok === true ? "LIVE DATA" : "ERROR"}
+                    </span>
+                  </div>
+                  <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap break-words p-4 text-[11px] leading-5">
+                    {JSON.stringify(verificationResult, null, 2)}
+                  </pre>
+                </section>
+              ) : null}
             </form>
           </section>
 
