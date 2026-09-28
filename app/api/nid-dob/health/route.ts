@@ -1,16 +1,36 @@
 import dns from "node:dns/promises";
 import { NextResponse } from "next/server";
+import { dghsConfigured, dghsEndpoint } from "@/lib/dghs-nid-proxy";
 import { porichoyConfigured } from "@/lib/porichoy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const preferredRegion = "sin1";
 
-export async function GET() {
-  const baseUrl = (process.env.PORICHOY_BASE_URL || "https://api.porichoybd.com").replace(/\/+$/, "");
-  const host = new URL(baseUrl).hostname;
-  let dnsCheck: { ok: boolean; address?: string; code?: string } = { ok: false };
+type DnsResult = {
+  ok: boolean;
+  address?: string;
+  code?: string;
+};
 
+type DohResult = {
+  ok: boolean;
+  status?: number;
+  answers?: string[];
+  error?: string;
+};
+
+type NetworkResult = {
+  reachable: boolean;
+  status: number | null;
+  state: "reachable" | "degraded" | "unreachable";
+  reason?: string;
+};
+
+async function diagnose(url: string) {
+  const host = new URL(url).hostname;
+
+  let dnsCheck: DnsResult = { ok: false };
   try {
     const resolved = await dns.lookup(host);
     dnsCheck = { ok: true, address: resolved.address };
@@ -22,7 +42,7 @@ export async function GET() {
     dnsCheck = { ok: false, code };
   }
 
-  let dohCheck: { ok: boolean; status?: number; answers?: string[]; error?: string } = { ok: false };
+  let dohCheck: DohResult = { ok: false };
   try {
     const dohResponse = await fetch(
       `https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`,
@@ -46,29 +66,27 @@ export async function GET() {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
-
-  let providerNetwork: {
-    reachable: boolean;
-    status: number | null;
-    state: "reachable" | "degraded" | "unreachable";
-    reason?: string;
-  } = { reachable: false, status: null, state: "unreachable" };
+  let network: NetworkResult = {
+    reachable: false,
+    status: null,
+    state: "unreachable",
+  };
 
   try {
-    const response = await fetch(baseUrl, {
+    const response = await fetch(url, {
       method: "HEAD",
       redirect: "manual",
       cache: "no-store",
       signal: controller.signal,
     });
 
-    providerNetwork = {
+    network = {
       reachable: true,
       status: response.status,
       state: response.status >= 500 ? "degraded" : "reachable",
     };
   } catch (error) {
-    providerNetwork = {
+    network = {
       reachable: false,
       status: null,
       state: "unreachable",
@@ -78,14 +96,33 @@ export async function GET() {
     clearTimeout(timer);
   }
 
+  return { url, host, dns: dnsCheck, dnsOverHttps: dohCheck, network };
+}
+
+export async function GET() {
+  const porichoyUrl = (process.env.PORICHOY_BASE_URL || "https://api.porichoybd.com").replace(/\/+$/, "");
+  const dghsUrl = dghsEndpoint();
+
+  const [porichoy, dghs] = await Promise.all([
+    diagnose(porichoyUrl),
+    diagnose(dghsUrl),
+  ]);
+
   return NextResponse.json(
     {
       ok: true,
-      porichoyConfigured: porichoyConfigured(),
-      dns: dnsCheck,
-      dnsOverHttps: dohCheck,
-      providerNetwork,
-      ready: porichoyConfigured() && providerNetwork.reachable,
+      providers: {
+        porichoy: {
+          configured: porichoyConfigured(),
+          ...porichoy,
+          ready: porichoyConfigured() && porichoy.network.reachable,
+        },
+        dghs: {
+          configured: dghsConfigured(),
+          ...dghs,
+          ready: dghsConfigured() && dghs.network.reachable,
+        },
+      },
       time: new Date().toISOString(),
     },
     {
