@@ -1,36 +1,96 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Mode = "nid" | "birth";
 
+type NetworkState = {
+  reachable: boolean;
+  status: number | null;
+  state: "reachable" | "degraded" | "unreachable";
+  reason?: string;
+};
+
+type ProviderState = {
+  configured: boolean;
+  network: NetworkState;
+  ready: boolean;
+  endpoint?: string;
+};
+
 type Status = {
   ok: boolean;
-  porichoyConfigured: boolean;
-  providerNetwork: {
-    reachable: boolean;
-    status: number | null;
-    state: "reachable" | "degraded" | "unreachable";
-    reason?: string;
+  providers: {
+    porichoy: ProviderState;
+    dghs: ProviderState;
   };
   ready: boolean;
   time: string;
 };
+
+type ProviderResult = Record<string, unknown> | null;
+
+function ResultCard({
+  title,
+  subtitle,
+  result,
+}: {
+  title: string;
+  subtitle: string;
+  result: ProviderResult;
+}) {
+  if (!result) return null;
+  const ok = result.ok === true;
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-slate-100">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[.12em] text-slate-400">
+            {title}
+          </div>
+          <div className="mt-1 text-xs font-bold">{subtitle}</div>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+            ok ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"
+          }`}
+        >
+          {ok ? "LIVE DATA" : "ERROR"}
+        </span>
+      </div>
+      <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap break-words p-4 text-[11px] leading-5">
+        {JSON.stringify(result, null, 2)}
+      </pre>
+    </section>
+  );
+}
 
 export default function NidDobPage() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
+
   const [status, setStatus] = useState<Status | null>(null);
   const [statusError, setStatusError] = useState("");
+
   const [mode, setMode] = useState<Mode>("nid");
   const [identifier, setIdentifier] = useState("");
   const [dob, setDob] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [mobile, setMobile] = useState("");
   const [consent, setConsent] = useState(false);
-  const [formMessage, setFormMessage] = useState("");
+
   const [verificationBusy, setVerificationBusy] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<Record<string, unknown> | null>(null);
+  const [porichoyResult, setPorichoyResult] = useState<ProviderResult>(null);
+  const [dghsResult, setDghsResult] = useState<ProviderResult>(null);
+  const [formMessage, setFormMessage] = useState("");
+
+  const providerReady = useMemo(
+    () => Boolean(status?.providers?.porichoy?.ready || status?.providers?.dghs?.ready),
+    [status],
+  );
 
   async function refreshStatus() {
     setStatusError("");
@@ -46,7 +106,7 @@ export default function NidDobPage() {
         return;
       }
       if (!response.ok) throw new Error(data.error || "Status check failed.");
-      setStatus(data);
+      setStatus(data as Status);
     } catch (error) {
       setStatusError(error instanceof Error ? error.message : "Status check failed.");
     }
@@ -116,18 +176,37 @@ export default function NidDobPage() {
     setStatus(null);
     setIdentifier("");
     setDob("");
+    setFullName("");
+    setMobile("");
     setConsent(false);
-    setVerificationResult(null);
+    setPorichoyResult(null);
+    setDghsResult(null);
+  }
+
+  async function requestJson(url: string, payload: Record<string, unknown>) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      cache: "no-store",
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+    return (await response.json().catch(() => ({
+      ok: false,
+      error: `Provider endpoint returned HTTP ${response.status}.`,
+    }))) as Record<string, unknown>;
   }
 
   async function submitVerification(event: FormEvent) {
     event.preventDefault();
     setFormMessage("");
-    setVerificationResult(null);
+    setPorichoyResult(null);
+    setDghsResult(null);
     setVerificationBusy(true);
 
-    const endpoint = mode === "nid" ? "/api/nid-dob/nid" : "/api/nid-dob/birth";
-    const payload =
+    const porichoyEndpoint = mode === "nid" ? "/api/nid-dob/nid" : "/api/nid-dob/birth";
+    const porichoyPayload =
       mode === "nid"
         ? {
             nidNumber: identifier,
@@ -140,30 +219,35 @@ export default function NidDobPage() {
             authorizedUse: consent,
           };
 
+    const dghsPayload = {
+      mode,
+      identifier,
+      dateOfBirth: dob,
+      name: fullName,
+      mobile,
+      authorizedUse: consent,
+    };
+
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        cache: "no-store",
-        credentials: "same-origin",
-        body: JSON.stringify(payload),
-      });
+      const porichoyPromise = requestJson(porichoyEndpoint, porichoyPayload);
 
-      const data = (await response.json().catch(() => ({
-        ok: false,
-        error: `Verification endpoint returned HTTP ${response.status}.`,
-      }))) as Record<string, unknown>;
+      const dghsPromise =
+        fullName.trim().length >= 2 && /^01\d{9}$/.test(mobile.replace(/\D/g, ""))
+          ? requestJson("/api/nid-dob/dghs", dghsPayload)
+          : Promise.resolve({
+              ok: false,
+              provider: "DGHS NID Proxy",
+              code: "INPUT_REQUIRED",
+              error: "DGHS requires the citizen full name and an 11-digit Bangladesh mobile number.",
+            });
 
-      setVerificationResult(data);
+      const [porichoy, dghs] = await Promise.all([porichoyPromise, dghsPromise]);
 
-      if (!response.ok || data.ok !== true) {
-        setFormMessage(
-          typeof data.error === "string"
-            ? data.error
-            : `Verification failed with HTTP ${response.status}.`,
-        );
-      } else {
-        setFormMessage("");
+      setPorichoyResult(porichoy);
+      setDghsResult(dghs);
+
+      if (porichoy.ok !== true && dghs.ok !== true) {
+        setFormMessage("No live provider returned a successful record. See each provider box below for the exact reason.");
       }
 
       void refreshStatus();
@@ -171,10 +255,17 @@ export default function NidDobPage() {
       const message =
         error instanceof Error ? error.message : "Verification request could not be completed.";
       setFormMessage(message);
-      setVerificationResult({ ok: false, error: message });
     } finally {
       setVerificationBusy(false);
     }
+  }
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setIdentifier("");
+    setFormMessage("");
+    setPorichoyResult(null);
+    setDghsResult(null);
   }
 
   if (authenticated === null) {
@@ -233,19 +324,17 @@ export default function NidDobPage() {
           </form>
 
           <p className="mt-5 border-t border-slate-100 pt-4 text-[11px] leading-5 text-slate-500">
-            The password is verified server-side and is not stored in browser local storage.
+            Provider credentials stay server-side and are never returned to the browser.
           </p>
         </section>
       </main>
     );
   }
 
-  const ready = status?.ready === true;
-
   return (
     <main className="min-h-dvh bg-[#f4f8fb] text-slate-950">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-950 text-sm font-black text-white">
               P
@@ -264,17 +353,17 @@ export default function NidDobPage() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl px-4 py-7 sm:py-10">
+      <section className="mx-auto max-w-6xl px-4 py-7 sm:py-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-extrabold uppercase tracking-[.14em] text-emerald-700">
               NID + Birth Registration
             </p>
             <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
-              Bangladesh identity verification
+              Live identity provider comparison
             </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Native Pinflix route — no iframe and no dependency on ilm.pincodeit.com.
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              One submission checks Porichoy and the official DGHS NID proxy separately and keeps each provider response in its own box.
             </p>
           </div>
           <button
@@ -285,18 +374,12 @@ export default function NidDobPage() {
           </button>
         </div>
 
-        <div className="mt-6 grid gap-5 lg:grid-cols-[1.25fr_.75fr]">
+        <div className="mt-6 grid gap-5 lg:grid-cols-[1.35fr_.65fr]">
           <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_18px_55px_rgba(36,63,82,.08)]">
             <div className="grid grid-cols-2 gap-2 border-b border-slate-200 bg-slate-50 p-2">
               <button
                 type="button"
-                onClick={() => {
-                  setMode("nid");
-                  setIdentifier("");
-                  setFormMessage("");
-                  setVerificationResult(null);
-                  setVerificationResult(null);
-                }}
+                onClick={() => switchMode("nid")}
                 className={`rounded-2xl px-4 py-3 text-left text-sm font-extrabold transition ${
                   mode === "nid" ? "bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500"
                 }`}
@@ -306,11 +389,7 @@ export default function NidDobPage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setMode("birth");
-                  setIdentifier("");
-                  setFormMessage("");
-                }}
+                onClick={() => switchMode("birth")}
                 className={`rounded-2xl px-4 py-3 text-left text-sm font-extrabold transition ${
                   mode === "birth" ? "bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200" : "text-slate-500"
                 }`}
@@ -321,31 +400,65 @@ export default function NidDobPage() {
             </div>
 
             <form onSubmit={submitVerification} className="space-y-5 p-5 sm:p-6">
-              <label className="block">
-                <span className="mb-2 block text-xs font-extrabold text-slate-700">
-                  {mode === "nid" ? "NID number" : "Birth Registration Number"}
-                </span>
-                <input
-                  value={identifier}
-                  onChange={(event) => setIdentifier(event.target.value.replace(/\D/g, "").slice(0, 17))}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder={mode === "nid" ? "10 / 13 / 17 digit NID" : "17 digit BRN"}
-                  className="h-13 w-full rounded-2xl border border-slate-300 bg-white px-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
-                  required
-                />
-              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-extrabold text-slate-700">
+                    {mode === "nid" ? "NID number" : "Birth Registration Number"}
+                  </span>
+                  <input
+                    value={identifier}
+                    onChange={(event) => setIdentifier(event.target.value.replace(/\D/g, "").slice(0, 17))}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder={mode === "nid" ? "10 / 13 / 17 digit NID" : "17 digit BRN"}
+                    className="h-13 w-full rounded-2xl border border-slate-300 bg-white px-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                    required
+                  />
+                </label>
 
-              <label className="block">
-                <span className="mb-2 block text-xs font-extrabold text-slate-700">Date of birth</span>
-                <input
-                  type="date"
-                  value={dob}
-                  onChange={(event) => setDob(event.target.value)}
-                  className="h-13 w-full rounded-2xl border border-slate-300 bg-white px-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
-                  required
-                />
-              </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-extrabold text-slate-700">Date of birth</span>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(event) => setDob(event.target.value)}
+                    className="h-13 w-full rounded-2xl border border-slate-300 bg-white px-4 outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-100"
+                    required
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+                <div className="mb-3">
+                  <div className="text-xs font-black text-cyan-950">DGHS additional fields</div>
+                  <div className="mt-1 text-[11px] leading-5 text-cyan-800">
+                    The official DGHS NID proxy documentation includes full name and mobile in its request body. Porichoy does not need these two fields.
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-extrabold text-slate-700">Full name</span>
+                    <input
+                      value={fullName}
+                      onChange={(event) => setFullName(event.target.value)}
+                      autoComplete="name"
+                      placeholder="Required for DGHS"
+                      className="h-12 w-full rounded-2xl border border-cyan-200 bg-white px-4 outline-none focus:border-cyan-600 focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-extrabold text-slate-700">Mobile number</span>
+                    <input
+                      value={mobile}
+                      onChange={(event) => setMobile(event.target.value.replace(/\D/g, "").slice(0, 11))}
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="01XXXXXXXXX"
+                      className="h-12 w-full rounded-2xl border border-cyan-200 bg-white px-4 outline-none focus:border-cyan-600 focus:ring-4 focus:ring-cyan-100"
+                    />
+                  </label>
+                </div>
+              </div>
 
               <label className="flex gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
                 <input
@@ -368,39 +481,21 @@ export default function NidDobPage() {
                 disabled={!identifier || !dob || !consent || verificationBusy}
                 className="h-12 w-full rounded-2xl bg-emerald-700 font-extrabold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45"
               >
-                {verificationBusy
-                  ? "Checking live provider…"
-                  : mode === "nid"
-                    ? "Check NID"
-                    : "Check Birth Registration"}
+                {verificationBusy ? "Checking live providers…" : "Check all live providers"}
               </button>
 
-              {verificationResult ? (
-                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-slate-100">
-                  <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-                    <div>
-                      <div className="text-[10px] font-black uppercase tracking-[.12em] text-slate-400">
-                        Live provider response
-                      </div>
-                      <div className="mt-1 text-xs font-bold">
-                        {verificationResult.ok === true ? "Request succeeded" : "Request failed"}
-                      </div>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
-                        verificationResult.ok === true
-                          ? "bg-emerald-500/15 text-emerald-300"
-                          : "bg-red-500/15 text-red-300"
-                      }`}
-                    >
-                      {verificationResult.ok === true ? "LIVE DATA" : "ERROR"}
-                    </span>
-                  </div>
-                  <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap break-words p-4 text-[11px] leading-5">
-                    {JSON.stringify(verificationResult, null, 2)}
-                  </pre>
-                </section>
-              ) : null}
+              <div className="grid gap-4">
+                <ResultCard
+                  title="Porichoy"
+                  subtitle={mode === "nid" ? "NID Autofill response" : "Birth Autofill response"}
+                  result={porichoyResult}
+                />
+                <ResultCard
+                  title="DGHS NID Proxy"
+                  subtitle={mode === "nid" ? "NID verification response" : "BRN verification response"}
+                  result={dghsResult}
+                />
+              </div>
             </form>
           </section>
 
@@ -409,32 +504,49 @@ export default function NidDobPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[.12em] text-slate-500">Backend status</p>
-                  <h2 className="mt-1 text-lg font-black">{ready ? "Ready" : "Setup required"}</h2>
+                  <h2 className="mt-1 text-lg font-black">{providerReady ? "At least one provider ready" : "Setup required"}</h2>
                 </div>
                 <span className={`rounded-full border px-3 py-1.5 text-[10px] font-black ${
-                  ready
+                  providerReady
                     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                     : "border-amber-200 bg-amber-50 text-amber-700"
                 }`}>
-                  {ready ? "READY" : "NOT READY"}
+                  {providerReady ? "READY" : "NOT READY"}
                 </span>
               </div>
 
               {status ? (
-                <dl className="mt-5 space-y-3 text-xs">
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <dt className="font-bold text-slate-500">Porichoy production credential</dt>
-                    <dd className="mt-1 font-extrabold text-slate-800">
-                      {status.porichoyConfigured ? "Configured" : "Not configured"}
-                    </dd>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <dt className="font-bold text-slate-500">Provider network</dt>
-                    <dd className="mt-1 font-extrabold text-slate-800">{status.providerNetwork.state}</dd>
-                  </div>
-                </dl>
+                <div className="mt-5 space-y-3 text-xs">
+                  {(["porichoy", "dghs"] as const).map((key) => {
+                    const item = status.providers[key];
+                    return (
+                      <div key={key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-black text-slate-900">
+                            {key === "porichoy" ? "Porichoy" : "DGHS NID Proxy"}
+                          </div>
+                          <span className={`rounded-full px-2 py-1 text-[9px] font-black ${
+                            item.ready ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
+                          }`}>
+                            {item.ready ? "READY" : "NOT READY"}
+                          </span>
+                        </div>
+                        <dl className="mt-3 grid grid-cols-2 gap-2">
+                          <div>
+                            <dt className="text-slate-500">Credentials</dt>
+                            <dd className="mt-1 font-extrabold">{item.configured ? "Configured" : "Missing"}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Network</dt>
+                            <dd className="mt-1 font-extrabold">{item.network.state}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                <p className="mt-4 text-xs text-slate-500">Checking provider…</p>
+                <p className="mt-4 text-xs text-slate-500">Checking providers…</p>
               )}
 
               {statusError ? (
@@ -445,9 +557,9 @@ export default function NidDobPage() {
             </section>
 
             <section className="rounded-[24px] border border-slate-200 bg-white p-5 text-xs leading-5 text-slate-600 shadow-sm">
-              <h2 className="text-sm font-black text-slate-900">Why this page is different</h2>
+              <h2 className="text-sm font-black text-slate-900">Provider rules</h2>
               <p className="mt-2">
-                This is a native route on the working Pinflix deployment. It does not load another website inside an iframe, so the broken embedded-page problem is removed.
+                Porichoy and DGHS use separate server-side credentials. A failure in one provider does not stop the other provider from being tested.
               </p>
             </section>
           </aside>
