@@ -38,7 +38,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
   const watching = pathname.startsWith("/watch/");
   const entertainmentDetail = pathname.startsWith("/entertainment/");
-  const standalone = watching || entertainmentDetail;
+  const identityVerification = pathname.startsWith("/nid_dob");
+  const standalone = watching || entertainmentDetail || identityVerification;
   const entertainmentListing = pathname === "/entertainment";
 
   if (standalone) {
