@@ -1,3 +1,4 @@
+import dns from "node:dns/promises";
 import { NextResponse } from "next/server";
 import { porichoyConfigured } from "@/lib/porichoy";
 
@@ -7,6 +8,20 @@ export const preferredRegion = "sin1";
 
 export async function GET() {
   const baseUrl = (process.env.PORICHOY_BASE_URL || "https://api.porichoybd.com").replace(/\/+$/, "");
+  const host = new URL(baseUrl).hostname;
+  let dnsCheck: { ok: boolean; address?: string; code?: string } = { ok: false };
+
+  try {
+    const resolved = await dns.lookup(host);
+    dnsCheck = { ok: true, address: resolved.address };
+  } catch (error) {
+    const code =
+      typeof error === "object" && error && "code" in error
+        ? String((error as { code?: unknown }).code || "DNS_ERROR")
+        : "DNS_ERROR";
+    dnsCheck = { ok: false, code };
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
 
@@ -45,6 +60,7 @@ export async function GET() {
     {
       ok: true,
       porichoyConfigured: porichoyConfigured(),
+      dns: dnsCheck,
       providerNetwork,
       ready: porichoyConfigured() && providerNetwork.reachable,
       time: new Date().toISOString(),
