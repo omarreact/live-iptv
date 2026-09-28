@@ -22,6 +22,28 @@ export async function GET() {
     dnsCheck = { ok: false, code };
   }
 
+  let dohCheck: { ok: boolean; status?: number; answers?: string[]; error?: string } = { ok: false };
+  try {
+    const dohResponse = await fetch(
+      `https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`,
+      { cache: "no-store" },
+    );
+    const dohBody = (await dohResponse.json()) as {
+      Status?: number;
+      Answer?: Array<{ data?: string }>;
+    };
+    dohCheck = {
+      ok: dohResponse.ok && dohBody.Status === 0,
+      status: dohBody.Status,
+      answers: (dohBody.Answer || []).map((item) => String(item.data || "")).filter(Boolean),
+    };
+  } catch (error) {
+    dohCheck = {
+      ok: false,
+      error: error instanceof Error ? error.name : "DOH_ERROR",
+    };
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
 
@@ -61,6 +83,7 @@ export async function GET() {
       ok: true,
       porichoyConfigured: porichoyConfigured(),
       dns: dnsCheck,
+      dnsOverHttps: dohCheck,
       providerNetwork,
       ready: porichoyConfigured() && providerNetwork.reachable,
       time: new Date().toISOString(),
