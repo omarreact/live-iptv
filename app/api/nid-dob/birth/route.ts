@@ -4,6 +4,7 @@ import { PorichoyError, verifyBirthRegistration } from "@/lib/porichoy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const preferredRegion = "sin1";
 
 const BRN_PATTERN = /^\d{17}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
