@@ -3,6 +3,7 @@ import { porichoyConfigured } from "@/lib/porichoy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const preferredRegion = "sin1";
 
 export async function GET() {
   const baseUrl = (process.env.PORICHOY_BASE_URL || "https://api.porichoybd.com").replace(/\/+$/, "");
