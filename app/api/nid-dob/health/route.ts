@@ -64,7 +64,7 @@ async function diagnose(url: string) {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
-  const network: NetworkResult = await (async () => {
+  const network: NetworkResult = await (async (): Promise<NetworkResult> => {
     try {
       const response = await fetch(url, {
         method: "HEAD",
