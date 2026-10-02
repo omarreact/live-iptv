@@ -235,7 +235,12 @@ async function proxy(request: Request, headOnly: boolean): Promise<Response> {
 
     const hasProviderHeaders = source.headers && Object.keys(source.headers).length > 0;
 
-    if (!target && !hasProviderHeaders && providerId !== "moviebox") {
+    if (
+      !target &&
+      !hasProviderHeaders &&
+      providerId !== "moviebox" &&
+      providerId !== "cineplex"
+    ) {
       return Response.redirect(assertSafeUrl(source.url).href, 307);
     }
 

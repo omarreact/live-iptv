@@ -4,6 +4,18 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
+  async rewrites() {
+    return [
+      {
+        source: "/cineplex-vod/:path*",
+        destination: "http://vod.cineplexbd.net:8081/:path*",
+      },
+      {
+        source: "/cineplex-origin/:path*",
+        destination: "http://cineplexbd.net/:path*",
+      },
+    ];
+  },
   async headers() {
     return [
       {
