@@ -44,37 +44,32 @@ function subtitleHref(
   return `/api/playback/subtitle?${params.toString()}`;
 }
 
-function cineplexGatewayUrl(rawUrl: string): string | null {
-  const url = new URL(rawUrl);
-  const host = url.hostname.toLowerCase();
-  const isCineplex =
-    host === "cineplexbd.net" ||
-    host === "www.cineplexbd.net" ||
-    host === "vod.cineplexbd.net";
+function cineplexSameOriginUrl(rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    const port = url.port || (url.protocol === "https:" ? "443" : "80");
 
-  if (!isCineplex || url.protocol !== "http:") return null;
+    if (
+      url.protocol === "http:" &&
+      host === "vod.cineplexbd.net" &&
+      port === "8081"
+    ) {
+      return `/cineplex-vod${url.pathname}${url.search}`;
+    }
 
-  const edgeBase =
-    process.env.CINEPLEX_MEDIA_EDGE_BASE?.trim() ||
-    "https://media.pincodeit.com";
-  const edge = new URL("/proxy", edgeBase);
-  edge.searchParams.set("url", url.href);
-  return edge.href;
-}
+    if (
+      url.protocol === "http:" &&
+      (host === "cineplexbd.net" || host === "www.cineplexbd.net") &&
+      port === "80"
+    ) {
+      return `/cineplex-origin${url.pathname}${url.search}`;
+    }
 
-function cineplexViewerDirectUrl(rawUrl: string, secureContext: boolean): string {
-  const url = new URL(rawUrl);
-  const host = url.hostname.toLowerCase();
-  const isCineplex =
-    host === "cineplexbd.net" ||
-    host === "www.cineplexbd.net" ||
-    host === "vod.cineplexbd.net";
-
-  if (isCineplex && secureContext && url.protocol === "http:") {
-    url.protocol = "https:";
+    return null;
+  } catch {
+    return null;
   }
-
-  return url.href;
 }
 
 function browserSource(
@@ -94,7 +89,6 @@ function toBrowserResult(
   providerId: string,
   input: ResolvePlaybackInput,
   result: PlaybackResult,
-  secureContext: boolean,
 ): BrowserPlaybackResult {
   const warnings: string[] = [];
   const sources = result.sources.flatMap((source, sourceIndex) => {
@@ -116,35 +110,30 @@ function toBrowserResult(
     }
 
     if (providerId === "cineplex" && !hasProtectedHeaders) {
-      const gatewayUrl = cineplexGatewayUrl(safeDirectUrl);
-      const viewerDirectUrl = cineplexViewerDirectUrl(
-        safeDirectUrl,
-        secureContext,
-      );
-      const upgradedForSecurePage = viewerDirectUrl !== safeDirectUrl;
-      const directQuality =
-        source.quality && source.quality.toLowerCase() !== "auto"
-          ? `${source.quality} · ${upgradedForSecurePage ? "Viewer HTTPS" : "Direct"}`
-          : upgradedForSecurePage
-            ? "Viewer HTTPS"
-            : "Direct network";
+      const sameOriginUrl = cineplexSameOriginUrl(safeDirectUrl);
 
-      const direct = browserSource(source, viewerDirectUrl, directQuality);
+      if (sameOriginUrl) {
+        warnings.push(
+          "CineplexBD HTTP media is delivered through Pinflix over HTTPS to avoid browser mixed-content blocking.",
+        );
 
-      if (!gatewayUrl || gatewayUrl === viewerDirectUrl) {
-        return [direct];
+        return [
+          browserSource(
+            source,
+            sameOriginUrl,
+            source.quality
+              ? `${source.quality} · Pinflix HTTPS`
+              : "Pinflix HTTPS",
+          ),
+          browserSource(
+            source,
+            proxyHref(providerId, input, sourceIndex),
+            "HTTPS proxy fallback",
+          ),
+        ];
       }
 
-      warnings.push(
-        upgradedForSecurePage
-          ? "Pinflix upgrades the CineplexBD media URL to HTTPS and tries it directly from this device first. If that host does not offer TLS/CORS on your network, playback falls back to the HTTPS gateway."
-          : "CineplexBD direct playback is attempted from this device first. If the local route or CORS is unavailable, Pinflix automatically tries the HTTPS gateway.",
-      );
-
-      return [
-        direct,
-        browserSource(source, gatewayUrl, "HTTPS gateway"),
-      ];
+      return [browserSource(source, safeDirectUrl)];
     }
 
     return [browserSource(source, safeDirectUrl)];
@@ -196,19 +185,14 @@ export async function GET(request: Request) {
     const provider = getPlaybackProvider(providerId);
     const result = await provider.resolve(input);
 
-    const browserResult = toBrowserResult(
-      providerId,
-      input,
-      result,
-      new URL(request.url).protocol === "https:",
-    );
+    const browserResult = toBrowserResult(providerId, input, result);
 
     return Response.json(browserResult, {
       headers: {
         "cache-control": "private, no-store, no-cache, max-age=0, must-revalidate",
         pragma: "no-cache",
         expires: "0",
-        "x-pinflix-playback-revision": "cineplex-viewer-network-v3",
+        "x-pinflix-playback-revision": "cineplex-same-origin-v4",
       },
     });
   } catch (error: unknown) {
