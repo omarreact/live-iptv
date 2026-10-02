@@ -10,7 +10,9 @@ import type {
 } from "@/types/catalog";
 
 const BASE = "http://cineplexbd.net";
-const EDGE = process.env.CINEPLEX_MEDIA_EDGE_BASE?.trim() || "https://media.pincodeit.com";
+const PUBLIC_ORIGIN = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}`
+  : process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://pinflix.pincodeit.com";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36";
 const TIMEOUT_MS = 12_000;
@@ -45,22 +47,41 @@ function absoluteUrl(raw: string, pageUrl = BASE): string | null {
   }
 }
 
-function edgeAsset(raw: string | null): string | null {
-  if (!raw) return null;
+function cineplexRewritePath(raw: string): string | null {
   try {
     const url = new URL(raw);
     const host = url.hostname.toLowerCase();
+    const port = url.port || (url.protocol === "https:" ? "443" : "80");
+
     if (
       url.protocol === "http:" &&
-      (host === "cineplexbd.net" ||
-        host === "www.cineplexbd.net" ||
-        host === "vod.cineplexbd.net")
+      host === "vod.cineplexbd.net" &&
+      port === "8081"
     ) {
-      const edge = new URL("/proxy", EDGE);
-      edge.searchParams.set("url", url.href);
-      return edge.href;
+      return `/cineplex-vod${url.pathname}${url.search}`;
     }
-    return url.href;
+
+    if (
+      url.protocol === "http:" &&
+      (host === "cineplexbd.net" || host === "www.cineplexbd.net") &&
+      port === "80"
+    ) {
+      return `/cineplex-origin${url.pathname}${url.search}`;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function edgeAsset(raw: string | null): string | null {
+  if (!raw) return null;
+  const rewritten = cineplexRewritePath(raw);
+  if (rewritten) return rewritten;
+
+  try {
+    return new URL(raw).href;
   } catch {
     return null;
   }
@@ -80,18 +101,27 @@ async function fetchText(url: URL): Promise<{ text: string; finalUrl: string }> 
     });
 
   let response = await direct(url.href).catch(() => null);
+  let finalUrl = response?.ok ? response.url || url.href : url.href;
 
   if (!response?.ok) {
-    const edge = new URL("/proxy", EDGE);
-    edge.searchParams.set("url", url.href);
-    response = await direct(edge.href);
+    const rewritePath = cineplexRewritePath(url.href);
+    if (rewritePath) {
+      response = await direct(new URL(rewritePath, PUBLIC_ORIGIN).href).catch(
+        () => null,
+      );
+      // HTML returned through a same-origin rewrite still contains CineplexBD
+      // relative links, so resolve those links against the upstream URL.
+      finalUrl = url.href;
+    }
   }
 
-  if (!response.ok) {
-    throw new Error(`CineplexBD request failed: ${response.status}`);
+  if (!response?.ok) {
+    throw new Error(
+      `CineplexBD request failed: ${response?.status ?? "unreachable"}`,
+    );
   }
 
-  return { text: await response.text(), finalUrl: response.url || url.href };
+  return { text: await response.text(), finalUrl };
 }
 
 async function fetchJson(url: URL): Promise<unknown> {
