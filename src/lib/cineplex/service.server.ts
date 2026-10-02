@@ -205,7 +205,39 @@ function parseItems(html: string, pageUrl: string): MediaItem[] {
   return items;
 }
 
-async function catalogPage(kind: CineplexKind, page: number): Promise<MediaItem[]> {
+function hasNextPage(html: string, currentPage: number): boolean {
+  let maxPage = currentPage;
+  const pageRegex = /(?:[?&]|&amp;)page=(\d+)/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = pageRegex.exec(html))) {
+    const value = Number(match[1]);
+    if (Number.isInteger(value)) maxPage = Math.max(maxPage, value);
+  }
+
+  return (
+    maxPage > currentPage ||
+    /<a\b[^>]*>\s*(?:Next|Next\s*Page|»|&raquo;)\s*<\/a>/i.test(html)
+  );
+}
+
+function pagedCatalog(
+  items: MediaItem[],
+  page: number,
+  hasNext: boolean,
+): MediaCatalogPage {
+  const perPage = Math.max(1, items.length || 24);
+  const total = hasNext
+    ? (page + 1) * perPage
+    : (page - 1) * perPage + items.length;
+
+  return { page, perPage, total, items };
+}
+
+async function catalogPage(
+  kind: CineplexKind,
+  page: number,
+): Promise<{ items: MediaItem[]; hasNext: boolean }> {
   const safePage = Math.max(1, Math.min(page, 100));
   const url =
     kind === "movie"
@@ -216,20 +248,19 @@ async function catalogPage(kind: CineplexKind, page: number): Promise<MediaItem[
         );
 
   const { text, finalUrl } = await fetchText(url);
-  return parseItems(text, finalUrl).filter((item) => item.kind === kind);
+  return {
+    items: parseItems(text, finalUrl).filter((item) => item.kind === kind),
+    hasNext: hasNextPage(text, safePage),
+  };
 }
 
 export async function getCineplexCatalog(
   kind: CineplexKind,
   page = 1,
 ): Promise<MediaCatalogPage> {
-  const items = await catalogPage(kind, page);
-  return {
-    page,
-    perPage: Math.max(1, items.length || 24),
-    total: items.length,
-    items,
-  };
+  const safePage = Math.max(1, Math.min(page, 100));
+  const result = await catalogPage(kind, safePage);
+  return pagedCatalog(result.items, safePage, result.hasNext);
 }
 
 export async function searchCineplex(
@@ -245,12 +276,7 @@ export async function searchCineplex(
   const { text, finalUrl } = await fetchText(url);
   const items = parseItems(text, finalUrl);
 
-  return {
-    page: safePage,
-    perPage: Math.max(1, items.length || 24),
-    total: items.length,
-    items,
-  };
+  return pagedCatalog(items, safePage, hasNextPage(text, safePage));
 }
 
 export async function getCineplexHome(): Promise<MediaHome> {
@@ -262,11 +288,17 @@ export async function getCineplexHome(): Promise<MediaHome> {
   const sections = [
     {
       title: "CineplexBD Movies",
-      items: movies.status === "fulfilled" ? movies.value.slice(0, 18) : [],
+      items:
+        movies.status === "fulfilled"
+          ? movies.value.items.slice(0, 18)
+          : [],
     },
     {
-      title: "CineplexBD Series",
-      items: series.status === "fulfilled" ? series.value.slice(0, 18) : [],
+      title: "CineplexBD Web Series",
+      items:
+        series.status === "fulfilled"
+          ? series.value.items.slice(0, 18)
+          : [],
     },
   ].filter((section) => section.items.length > 0);
 
