@@ -4,18 +4,6 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
-  async rewrites() {
-    return [
-      {
-        source: "/cineplex-vod/:path*",
-        destination: "http://vod.cineplexbd.net:8081/:path*",
-      },
-      {
-        source: "/cineplex-origin/:path*",
-        destination: "http://cineplexbd.net/:path*",
-      },
-    ];
-  },
   async headers() {
     return [
       {
@@ -26,13 +14,9 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-DNS-Prefetch-Control", value: "on" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          {
-            key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(self)",
-          },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
       },
     ];

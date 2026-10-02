@@ -1,161 +1,36 @@
-/** Raw shapes from https://iptv-org.github.io/api */
+export type SourceKind = "hls" | "mp4" | "ts";
 
-export type IptvOrgCategory = {
-  id: string;
-  name: string;
-  description?: string;
-};
-
-export type IptvOrgCountry = {
-  name: string;
-  code: string;
-  languages?: string[];
-  flag?: string;
-};
-
-export type IptvOrgStream = {
-  channel: string | null;
-  feed?: string | null;
-  title?: string;
+export type StreamSource = {
   url: string;
-  quality?: string | null;
-  label?: string | null;
-  referrer?: string | null;
-  user_agent?: string | null;
-  timeshift?: string | null;
-  http_referrer?: string | null;
-};
-
-export type IptvOrgGuide = {
-  channel: string | null;
-  feed?: string | null;
-  site: string;
-  site_id: string;
-  site_name?: string;
-  lang: string;
-  sources?: Array<{
-    host?: string;
-    url: string;
-    format?: string;
-  }>;
-};
-
-export type IptvOrgChannel = {
-  id: string;
-  name: string;
-  alt_names?: string[];
-  network?: string | null;
-  owners?: string[];
-  country: string;
-  subdivision?: string | null;
-  city?: string | null;
-  broadcast_area?: string[];
-  languages?: string[];
-  categories?: string[];
-  is_nsfw?: boolean;
-  launched?: string | null;
-  closed?: string | null;
-  replaced_by?: string | null;
-  website?: string | null;
-  logo?: string;
-  native_name?: string | null;
-};
-
-export type IptvOrgLogo = {
-  channel: string;
-  feed?: string | null;
-  url: string;
-  width?: number;
-  height?: number;
-  format?: string | null;
-  in_use?: boolean;
-};
-
-/** Channel from iptv-org with its streams attached (server normalize step). */
-export type AppChannel = IptvOrgChannel & {
-  streams: IptvOrgStream[];
-};
-
-/** UI / player stream shape used across the app. */
-export type Stream = {
-  id: string;
-  url: string;
-  title: string;
-  feed: string | null;
-  quality: string | null;
-  label: string | null;
-  geoBlocked: boolean;
-  not247: boolean;
-  userAgent: string | null;
-  referrer: string | null;
-};
-
-export type GuideSource = {
-  site: string;
-  siteId: string;
-  xmltvId: string;
-  lang: string;
-  url: string;
+  kind: SourceKind;
+  host: string;
+  score: number;
 };
 
 export type Channel = {
   id: string;
   name: string;
-  shortName: string;
+  normalizedName: string;
   logo: string;
-  url: string;
-  groups: string[];
+  category: string;
   country: string | null;
-  quality: string | null;
-  geoBlocked: boolean;
-  not247: boolean;
-  userAgent: string | null;
-  referrer: string | null;
-  network: string | null;
-  altNames: string[];
-  website: string | null;
-  streams: Stream[];
-  guide: GuideSource | null;
+  sources: StreamSource[];
 };
 
-/** Compact channel shape safe to serialize into lists and browser storage. */
-export type ChannelPreview = Pick<
-  Channel,
-  "id" | "shortName" | "logo" | "groups" | "country" | "quality" | "geoBlocked"
-> & {
-  available: boolean;
+export type PublicChannel = Omit<Channel, "sources" | "normalizedName"> & {
+  sourceCount: number;
+  sourceKinds: SourceKind[];
 };
 
-export function toChannelPreview(channel: Channel): ChannelPreview {
-  return {
-    id: channel.id,
-    shortName: channel.shortName,
-    logo: channel.logo,
-    groups: channel.groups,
-    country: channel.country,
-    quality: channel.quality,
-    geoBlocked: channel.geoBlocked,
-    available: channel.streams.length > 0 && Boolean(channel.url),
-  };
-}
-
-export type Country = {
-  code: string;
+export type CatalogCategory = {
   name: string;
-  count: number;
-  flag?: string;
-};
-
-export type Category = {
-  id: string;
-  name: string;
-  description: string;
+  slug: string;
   count: number;
 };
 
-export type HomeData = {
-  total: number;
-  countryCount: number;
-  featured: ChannelPreview[];
-  rows: { category: Category; channels: ChannelPreview[] }[];
+export type Catalog = {
+  channels: Channel[];
+  categories: CatalogCategory[];
+  fetchedAt: string;
+  source: string;
 };

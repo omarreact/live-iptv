@@ -1,91 +1,58 @@
-# iptv — Watch the world live
+# Live IPTV
 
-Pinflix is a fast, live-TV-first Next.js application for discovering and watching public and authorized television streams from around the world.
+A clean live-TV-only Next.js application built around the supplied M3U playlist.
 
-## Product direction
+## What changed
 
-The interface follows one path: **find → play → watch**.
+The previous Pinflix/MovieBox/NID/entertainment code has been removed from the application tree. The new app now has one job: load, normalize, browse, and play live television.
 
-- No marketing hero or dashboard chrome
-- Country-first and category-based discovery
-- Prominent search
-- Favorites + recent channels
-- Quiet automatic source failover
-- Now/Next EPG when a mapped guide is available
-- Mobile-first controls with TV/remote-friendly focus states
-- Curated Live TV guide: 42 Bangladesh channels + 100 foreign channels
-- Movies & Series discovery remains separate from the Live TV catalog
-
-## Streaming architecture
+### Pipeline
 
 ```text
-iptv-org metadata + streams + EPG mappings
-      ↓
-Pinflix 142-channel curation policy
-      ↓
-health-aware source ranking + safe same-origin proxy
-      ↓
-automatic source failover
-      ↓
-hls.js / native HLS / mpegts.js
-
-Movies, TV Series, and Animation use a separate server-side MovieBox provider/resolver with same-origin playback and subtitle gateways.
+Supplied M3U Gist
+  -> server-side refresh (5 minute cache)
+  -> strict M3U parsing
+  -> channel-name normalization
+  -> duplicate channel merge
+  -> ranked primary + fallback sources
+  -> catalog-scoped same-origin proxy
+  -> hls.js / native HLS / mpegts.js
 ```
 
-The health layer combines transport safety, stream restrictions, quality, and passive runtime observations. Each proxied upstream attempt records success/failure plus response latency. Pinflix keeps a bounded, short-lived in-memory health profile per source (success ratio, consecutive failures, and EWMA latency), then re-ranks primary/backup sources on later opens. This is intentionally viewer-anonymous and Vercel-safe: it stores no user identifiers and does not run expensive background probes.
+### Features
 
-A viewer-safe diagnostic endpoint is available at `/api/health?channel=<id>`. It returns only aggregate availability, source count, preferred quality, and health score — never upstream URLs or request headers.
+- M3U catalog refreshes automatically from the latest Gist endpoint
+- pinned revision fallback if the latest endpoint is unavailable
+- duplicate channel names become backup sources instead of duplicate cards
+- HTTPS/domain/HLS sources are ranked ahead of weaker raw-IP/HTTP sources
+- automatic player failover
+- Bangla/category browsing and channel search
+- responsive mobile/desktop/TV-friendly interface
+- stream URLs stay server-side; the public catalog API exposes metadata only
+- proxy blocks localhost, private networks, metadata hosts, and unsupported protocols
+- HLS child resources are limited to the selected source host/subdomains
 
-The proxy remains catalog-restricted and blocks private/internal hosts. The health/failover design is inspired by the operational ideas used by dedicated IPTV managers such as Dispatcharr — stream monitoring, source priority, and automatic failover — without adding Dispatcharr as a runtime dependency.
+## Environment variables
 
-## Stack
-
-- **Next.js 16 App Router**
-- **React 19 + TypeScript**
-- **Tailwind CSS v4**
-- **hls.js** for HLS playback
-- **mpegts.js** for MPEG-TS fallback
-- **Zustand** for device-local favorites and recent channels
-- **iptv-org API** as the upstream metadata/stream/EPG source, filtered by Pinflix's 142-channel public curation policy
-- **iptv-org EPG/XMLTV** for Now/Next data where available
-- **TMDB** optional entertainment metadata enrichment
-- **TVmaze** no-key entertainment fallback
-- **Passive health/failover service** for source priority, latency observation, and automatic backup selection
-
-## Optional environment variables
+Both are optional because the supplied playlist is the default:
 
 ```bash
-NEXT_PUBLIC_SITE_URL=https://pinflix.pincodeit.com
-TMDB_API_READ_TOKEN=your_tmdb_read_token
-# or legacy:
-TMDB_API_KEY=your_tmdb_api_key
-PINFLIX_ADMIN_PASSWORD=choose_a_strong_admin_password
+IPTV_PLAYLIST_URL=
+IPTV_PLAYLIST_FALLBACK_URL=
 ```
 
-TMDB is used server-side for the Movies & Shows catalog, search, details, posters, and legal watch-provider availability. Use a TMDB read access token when possible.
-The `/admin` page stores licensed custom media entries in `data/admin-media.json`. Set `PINFLIX_ADMIN_PASSWORD` before using it. File storage is suitable for local/self-hosted deployments; use durable database storage before deploying this admin writer to a serverless platform.
-
-## Develop
+## Development
 
 ```bash
-npm install
+npm ci
+npm run check
 npm run dev
-```
-
-Validation:
-
-```bash
-npm run typecheck
-npm run lint
-npm run build
 ```
 
 ## Deployment
 
-Production: https://iptv.pincodeit.com
+This repository is intended for the Vercel project **live-iptv**.
 
-The Vercel project uses Node.js 24.
+## Content policy
 
-## Legal
-
-Pinflix does not host third-party media. Public stream URLs can be geo-restricted, offline, or removed by their broadcasters. Metadata enrichment does not grant streaming rights; only public or properly authorized streams should be distributed through the application.
+The application is a player/indexer and does not host television media. Only streams you are authorized to access or distribute should be used in production. Upstream availability and rights can change independently of this application.

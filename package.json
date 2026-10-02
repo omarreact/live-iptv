@@ -1,7 +1,7 @@
 {
-  "name": "pinflix",
+  "name": "live-iptv",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 8080",
@@ -32,9 +32,9 @@
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-react-hooks": "7.1.1",
     "prettier": "3.9.6",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.2",
-    "typescript-eslint": "8.69.0",
-    "tailwindcss": "^4.3.3"
+    "typescript-eslint": "8.69.0"
   },
   "engines": {
     "node": "24.x"

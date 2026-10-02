@@ -1,5 +1,8 @@
-import { HomeLoading } from "@/components/loading";
-
 export default function Loading() {
-  return <HomeLoading />;
+  return (
+    <div className="loading-shell">
+      <div className="loading-spinner" />
+      <p>Loading live channels…</p>
+    </div>
+  );
 }

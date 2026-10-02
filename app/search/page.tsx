@@ -1,81 +1,47 @@
-import { Search as SearchIcon } from "lucide-react";
-import { ChannelGrid } from "@/components/channel-card";
-import { searchChannels } from "@/lib/iptv/provider/iptv-org";
-import type { ChannelPreview } from "@/lib/iptv/types";
+import { ChannelCard } from "@/components/channel-card";
+import { getCatalog, toPublicChannel } from "@/lib/iptv/catalog.server";
 
-export const metadata = {
-  title: "Search",
-  description: "Search live TV channels and countries on Pinflix.",
-};
+export const revalidate = 300;
 
-type SearchParams = Promise<{ q?: string | string[] }>;
-
-function first(value: string | string[] | undefined): string {
-  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
-}
-
-export default async function SearchPage({ searchParams }: { searchParams: SearchParams }) {
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const params = await searchParams;
-  const query = first(params.q).trim().slice(0, 120);
+  const query = (params.q || "").trim();
+  const normalized = query.toLowerCase();
+  const catalog = await getCatalog();
 
-  let results: ChannelPreview[] = [];
-  let failed = false;
-
-  if (query.length >= 2) {
-    try {
-      const publicResults = await searchChannels(query, 60);
-
-      const unique = new Map<string, ChannelPreview>();
-      for (const channel of publicResults) {
-        if (!unique.has(channel.id)) unique.set(channel.id, channel);
-      }
-      results = [...unique.values()].slice(0, 60);
-    } catch (error: unknown) {
-      console.error("Pinflix search failed", error);
-      failed = true;
-    }
-  }
+  const matches = query
+    ? catalog.channels
+        .filter((channel) =>
+          [channel.name, channel.category, channel.country || ""]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalized),
+        )
+        .map(toPublicChannel)
+    : [];
 
   return (
-    <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <header>
-        <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">Search</h1>
-        <p className="mt-2 text-muted">Find channels by name, country, or category.</p>
-      </header>
-
-      <form action="/search" method="get" className="relative mt-5 max-w-xl">
-        <SearchIcon className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted" />
-        <input
-          type="search"
-          name="q"
-          defaultValue={query}
-          placeholder="Search channels, countries…"
-          className="h-12 w-full rounded-xl border border-border bg-surface pl-10 pr-4 text-sm text-fg outline-none transition-colors placeholder:text-subtle hover:border-border-strong focus:border-brand focus:ring-2 focus:ring-brand/15"
-          autoFocus
-          aria-label="Search channels and countries"
-        />
+    <section className="page-shell">
+      <div className="page-heading">
+        <span className="eyebrow">SEARCH</span>
+        <h1>{query ? 'Results for "' + query + '"' : "Search channels"}</h1>
+        <p>{query ? matches.length + " matching channels" : "Type a channel, category, or country."}</p>
+      </div>
+      <form className="page-search" action="/search">
+        <input name="q" defaultValue={query} type="search" autoFocus placeholder="Channel name, category, country…" />
+        <button type="submit">Search</button>
       </form>
-
-      <section className="mt-8">
-        {failed ? (
-          <p className="text-sm text-brand" role="alert">
-            Search is temporarily unavailable.
-          </p>
-        ) : query.length < 2 ? (
-          <p className="text-sm text-subtle">Type at least two letters and press Enter.</p>
-        ) : results.length === 0 ? (
-          <p className="text-sm text-muted">
-            No channels found. Try a country or different spelling.
-          </p>
-        ) : (
-          <>
-            <p className="mb-4 text-sm text-muted">
-              {results.length} {results.length === 1 ? "channel" : "channels"}
-            </p>
-            <ChannelGrid channels={results} />
-          </>
-        )}
-      </section>
-    </main>
+      {matches.length > 0 ? (
+        <div className="channel-grid">
+          {matches.map((channel) => <ChannelCard key={channel.id} channel={channel} />)}
+        </div>
+      ) : query ? (
+        <div className="empty-state"><h2>No channel found</h2><p>Try a shorter channel name or browse a category.</p></div>
+      ) : null}
+    </section>
   );
 }

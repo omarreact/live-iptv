@@ -1,4 +1,4 @@
-name: Pinflix CI
+name: Live IPTV CI
 
 on:
   push:

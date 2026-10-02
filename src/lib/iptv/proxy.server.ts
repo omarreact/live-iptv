@@ -1,136 +1,119 @@
-import { recordStreamFailure, recordStreamSuccess } from "./health";
-import { getIptvCatalog } from "./provider/iptv-org";
+import { getChannel } from "./catalog.server";
 
-const UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
-const MAX_UA = 400;
-const MAX_REDIRECTS = 6;
-const MAX_URL_LENGTH = 4_096;
-const ALLOWED_HOSTS_TTL_MS = 60 * 60_000;
+const MAX_REDIRECTS = 5;
+const MAX_CHILD_URL = 4096;
+const DEFAULT_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36";
 
-let allowedHostsCache: { expiresAt: number; hosts: Set<string> } | null = null;
-
-function isPrivateHostname(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (
-    h === "localhost" ||
-    h === "::1" ||
-    h === "0.0.0.0" ||
-    h.endsWith(".local") ||
-    h.endsWith(".localhost") ||
-    h.endsWith(".internal") ||
-    h.endsWith(".home.arpa") ||
-    h === "metadata.google.internal"
-  )
+    host === "localhost" ||
+    host === "::" ||
+    host === "::1" ||
+    host === "0.0.0.0" ||
+    host.endsWith(".local") ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".home.arpa") ||
+    host === "metadata.google.internal"
+  ) {
     return true;
+  }
 
-  const m = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (m) {
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    const c = Number(m[3]);
-    const d = Number(m[4]);
-    if ([a, b, c, d].some((n) => n < 0 || n > 255)) return true;
-    if (a === 10 || a === 127 || a === 0 || a >= 224) return true;
+  const match = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (match) {
+    const a = Number(match[1]);
+    const b = Number(match[2]);
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return true;
     if (a === 169 && b === 254) return true;
-    if (a === 192 && b === 168) return true;
     if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
     if (a === 100 && b >= 64 && b <= 127) return true;
   }
 
-  if (
-    h.startsWith("fe80:") ||
-    h.startsWith("fc") ||
-    h.startsWith("fd") ||
-    h === "::" ||
-    h === "::1"
-  )
-    return true;
-  return false;
+  return host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:");
 }
 
-export function assertSafeUrl(raw: string): URL {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error("Invalid stream URL");
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:")
-    throw new Error("Unsupported protocol");
-  if (isPrivateHostname(url.hostname)) throw new Error("Blocked host");
+function assertPublicHttpUrl(raw: string): URL {
+  const url = new URL(raw);
+  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Unsupported protocol");
+  if (isPrivateHost(url.hostname)) throw new Error("Blocked host");
   return url;
 }
 
-async function getAllowedHosts(): Promise<Set<string>> {
-  if (allowedHostsCache && allowedHostsCache.expiresAt > Date.now()) {
-    return allowedHostsCache.hosts;
-  }
+function proxyScopeAllows(root: URL, child: URL): boolean {
+  const rootHost = root.hostname.toLowerCase();
+  const childHost = child.hostname.toLowerCase();
+  return childHost === rootHost || childHost.endsWith("." + rootHost);
+}
 
-  const catalog = await getIptvCatalog();
-  const hosts = new Set<string>();
-  for (const channel of catalog.channels) {
-    for (const stream of channel.streams) {
-      try {
-        const url = assertSafeUrl(stream.url);
-        hosts.add(url.hostname.toLowerCase());
-      } catch {
-        /* ignore invalid catalog entries */
-      }
+async function fetchUpstream(target: URL, request: Request): Promise<{ response: Response; finalUrl: URL }> {
+  let current = target;
+  for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
+    const headers = new Headers({
+      accept: "*/*",
+      "user-agent": DEFAULT_UA,
+    });
+    const range = request.headers.get("range");
+    if (range) headers.set("range", range);
+
+    const response = await fetch(current, {
+      headers,
+      redirect: "manual",
+      cache: "no-store",
+      signal: AbortSignal.timeout(18000),
+    });
+
+    if (response.status < 300 || response.status >= 400) {
+      return { response, finalUrl: current };
     }
+
+    if (redirect === MAX_REDIRECTS) throw new Error("Too many redirects");
+    const location = response.headers.get("location");
+    if (!location) throw new Error("Invalid redirect");
+    current = assertPublicHttpUrl(new URL(location, current).href);
   }
-
-  allowedHostsCache = {
-    expiresAt: Date.now() + ALLOWED_HOSTS_TTL_MS,
-    hosts,
-  };
-  return hosts;
+  throw new Error("Redirect failure");
 }
 
-async function assertCatalogHost(url: URL): Promise<void> {
-  const hosts = await getAllowedHosts();
-  if (!hosts.has(url.hostname.toLowerCase()))
-    throw new Error("Stream host is not in the IPTV catalog");
+function looksLikePlaylist(url: URL, contentType: string): boolean {
+  return (
+    /\.m3u8?(?:$|[?#])/i.test(url.pathname + url.search) ||
+    /mpegurl|x-mpegurl|apple\.mpegurl/i.test(contentType)
+  );
 }
 
-type ProxyExtras = { ua: string; referrer: string | null };
-
-function extrasFromRequest(incoming: URL): ProxyExtras {
-  const uaRaw = incoming.searchParams.get("ua");
-  const r = incoming.searchParams.get("r");
-  let referrer: string | null = null;
-  if (r) {
-    try {
-      const u = new URL(r);
-      if ((u.protocol === "http:" || u.protocol === "https:") && !isPrivateHostname(u.hostname))
-        referrer = u.href;
-    } catch {
-      /* ignore invalid referrer */
-    }
+function passthroughHeaders(response: Response): Headers {
+  const headers = new Headers();
+  headers.set("content-type", response.headers.get("content-type") || "application/octet-stream");
+  headers.set("cache-control", "no-store");
+  headers.set("x-content-type-options", "nosniff");
+  for (const name of ["content-length", "content-range", "accept-ranges"]) {
+    const value = response.headers.get(name);
+    if (value) headers.set(name, value);
   }
-  return { ua: uaRaw && uaRaw.length > 0 && uaRaw.length <= MAX_UA ? uaRaw : UA, referrer };
+  return headers;
 }
 
-function proxyUrl(origin: string, target: string, extras: ProxyExtras): string {
-  const p = new URLSearchParams({ u: target });
-  if (extras.ua !== UA) p.set("ua", extras.ua);
-  if (extras.referrer) p.set("r", extras.referrer);
-  return `${origin}/api/stream?${p.toString()}`;
-}
-
-function rewriteM3u8(
+function rewritePlaylist(
   text: string,
-  base: string,
-  origin: string,
-  extras: ProxyExtras,
-  allowedHosts: Set<string>,
+  finalUrl: URL,
+  rootUrl: URL,
+  requestUrl: URL,
+  channelId: string,
+  sourceIndex: number,
 ): string {
-  const rewriteChild = (raw: string): string => {
+  const toProxy = (raw: string): string => {
     try {
-      const child = assertSafeUrl(new URL(raw, base).href);
-      return allowedHosts.has(child.hostname.toLowerCase())
-        ? proxyUrl(origin, child.href, extras)
-        : child.href;
+      const child = assertPublicHttpUrl(new URL(raw, finalUrl).href);
+      if (!proxyScopeAllows(rootUrl, child)) return child.href;
+      const params = new URLSearchParams({
+        channel: channelId,
+        source: String(sourceIndex),
+        u: child.href,
+      });
+      return requestUrl.origin + "/api/stream?" + params.toString();
     } catch {
       return raw;
     }
@@ -142,167 +125,76 @@ function rewriteM3u8(
       const trimmed = line.trim();
       if (!trimmed) return line;
       if (trimmed.startsWith("#")) {
-        return line.replace(
-          /URI="([^"]+)"/gi,
-          (_, uri: string) => `URI="${rewriteChild(uri)}"`,
-        );
+        return line.replace(/URI="([^"]+)"/gi, (_match, uri: string) => 'URI="' + toProxy(uri) + '"');
       }
-      return rewriteChild(trimmed);
+      return toProxy(trimmed);
     })
     .join("\n");
 }
 
-function isPlaylistPath(url: URL): boolean {
-  const path = url.pathname.toLowerCase();
-  return path.endsWith(".m3u8") || path.endsWith(".m3u") || path.endsWith(".smil");
-}
+export async function proxyCatalogStream(request: Request): Promise<Response> {
+  const requestUrl = new URL(request.url);
+  const channelId = requestUrl.searchParams.get("channel")?.trim() || "";
+  const sourceIndex = Number(requestUrl.searchParams.get("source") || "0");
 
-function passthroughHeaders(
-  upstream: Response,
-  fallbackType?: string,
-  finalUrl?: URL,
-): Headers {
-  const out = new Headers();
-  out.set(
-    "content-type",
-    upstream.headers.get("content-type") || fallbackType || "application/octet-stream",
-  );
-  out.set("cache-control", "no-store");
-  out.set(
-    "access-control-expose-headers",
-    "Content-Length, Content-Range, Accept-Ranges, X-Pinflix-Upstream-Status",
-  );
-  out.set("x-accel-buffering", "no");
-  out.set("x-pinflix-upstream-status", String(upstream.status));
-  void finalUrl;
-  for (const name of ["content-length", "content-range", "accept-ranges"]) {
-    const value = upstream.headers.get(name);
-    if (value) out.set(name, value);
-  }
-  return out;
-}
-
-type UpstreamResult = {
-  response: Response;
-  finalUrl: URL;
-};
-
-async function fetchUpstream(
-  target: URL,
-  request: Request,
-  extras: ProxyExtras,
-): Promise<UpstreamResult> {
-  let current = target;
-
-  for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
-    // The initial URL is catalog-approved before this function is called.
-    // Redirect destinations are trusted only as a chain from that approved URL,
-    // and are still blocked from private/internal network targets.
-    const headers = new Headers({ "user-agent": extras.ua, accept: "*/*" });
-    const range = request.headers.get("range");
-    if (range) headers.set("range", range);
-    if (extras.referrer) {
-      headers.set("referer", extras.referrer);
-      headers.set("origin", new URL(extras.referrer).origin);
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 18_000);
-    let upstream: Response;
-    try {
-      upstream = await fetch(current, {
-        headers,
-        redirect: "manual",
-        cache: "no-store",
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    if (upstream.status < 300 || upstream.status >= 400) {
-      return { response: upstream, finalUrl: current };
-    }
-
-    if (redirect === MAX_REDIRECTS) throw new Error("Too many upstream redirects");
-    const location = upstream.headers.get("location");
-    if (!location) throw new Error("Invalid upstream redirect");
-    current = assertSafeUrl(new URL(location, current).href);
+  if (!channelId || channelId.length > 180 || !Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex > 20) {
+    return new Response("Invalid stream request", { status: 400 });
   }
 
-  throw new Error("Upstream redirect failed");
-}
+  const channel = await getChannel(channelId);
+  const source = channel?.sources[sourceIndex];
+  if (!channel || !source) return new Response("Stream source not found", { status: 404 });
 
-export async function proxyStream(request: Request): Promise<Response> {
-  const incoming = new URL(request.url);
-  const raw = incoming.searchParams.get("u");
-  if (!raw) return new Response("Missing url", { status: 400 });
-  if (raw.length > MAX_URL_LENGTH) return new Response("URL is too long", { status: 414 });
-
+  let rootUrl: URL;
   let target: URL;
   try {
-    target = assertSafeUrl(raw);
-    await assertCatalogHost(target);
-  } catch (err) {
-    return new Response(err instanceof Error ? err.message : "Bad url", { status: 403 });
+    rootUrl = assertPublicHttpUrl(source.url);
+    const childRaw = requestUrl.searchParams.get("u");
+    if (childRaw && childRaw.length > MAX_CHILD_URL) return new Response("URL too long", { status: 414 });
+    target = childRaw ? assertPublicHttpUrl(childRaw) : rootUrl;
+    if (childRaw && !proxyScopeAllows(rootUrl, target)) {
+      return new Response("Child stream is outside the source scope", { status: 403 });
+    }
+  } catch {
+    return new Response("Invalid upstream", { status: 403 });
   }
 
-  const extras = extrasFromRequest(incoming);
-  const startedAt = Date.now();
-  let result: UpstreamResult;
+  let upstreamResult: { response: Response; finalUrl: URL };
   try {
-    result = await fetchUpstream(target, request, extras);
-  } catch (err) {
-    recordStreamFailure(target.href, Date.now() - startedAt);
-    return new Response(err instanceof Error ? err.message : "Upstream unreachable", {
+    upstreamResult = await fetchUpstream(target, request);
+  } catch {
+    return new Response("Upstream unreachable", {
       status: 502,
-      headers: {
-        "cache-control": "no-store",
+      headers: { "cache-control": "no-store" },
+    });
+  }
+
+  const { response, finalUrl } = upstreamResult;
+  if (!response.ok && response.status !== 206) {
+    return new Response("Upstream stream unavailable (" + String(response.status) + ")", {
+      status: 502,
+      headers: { "cache-control": "no-store" },
+    });
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (looksLikePlaylist(finalUrl, contentType)) {
+    const text = await response.text();
+    return new Response(
+      rewritePlaylist(text, finalUrl, rootUrl, requestUrl, channelId, sourceIndex),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/vnd.apple.mpegurl",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        },
       },
-    });
-  }
-
-  const { response: upstream, finalUrl } = result;
-
-  if (!upstream.ok && upstream.status !== 206) {
-    recordStreamFailure(target.href, Date.now() - startedAt);
-    const headers = passthroughHeaders(upstream, "text/plain; charset=utf-8", finalUrl);
-    // Surface gateway failure as 502 so the client can distinguish a broken
-    // upstream stream from a missing Pinflix API route.
-    return new Response(`Upstream stream unavailable (${upstream.status})`, {
-      status: 502,
-      headers,
-    });
-  }
-
-  recordStreamSuccess(target.href, Date.now() - startedAt);
-
-  const contentType = upstream.headers.get("content-type") ?? "";
-  const origin = incoming.origin;
-  const treatAsPlaylist =
-    isPlaylistPath(finalUrl) ||
-    isPlaylistPath(target) ||
-    /mpegurl|x-mpegurl|apple\.mpegurl|vnd\.apple/i.test(contentType);
-
-  if (treatAsPlaylist) {
-    const text = await upstream.text();
-    // Relative HLS URLs must resolve from the final URL after redirects.
-    const allowedHosts = await getAllowedHosts();
-    const rewritten = rewriteM3u8(
-      text,
-      finalUrl.href,
-      origin,
-      extras,
-      allowedHosts,
     );
-    return new Response(rewritten, {
-      status: 200,
-      headers: passthroughHeaders(upstream, "application/vnd.apple.mpegurl", finalUrl),
-    });
   }
 
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: passthroughHeaders(upstream, undefined, finalUrl),
+  return new Response(response.body, {
+    status: response.status,
+    headers: passthroughHeaders(response),
   });
 }
