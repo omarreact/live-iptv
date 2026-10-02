@@ -1,4 +1,4 @@
-# Pinflix — Watch the world live
+# iptv — Watch the world live
 
 Pinflix is a fast, live-TV-first Next.js application for discovering and watching public and authorized television streams from around the world.
 
@@ -82,7 +82,7 @@ npm run build
 
 ## Deployment
 
-Production: https://pinflix.pincodeit.com
+Production: https://iptv.pincodeit.com
 
 The Vercel project uses Node.js 24.
 
