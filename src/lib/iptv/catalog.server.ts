@@ -48,8 +48,8 @@ async function buildCatalog(): Promise<Catalog> {
   }
 
   if (playlists.length > 0) {
-    const mergedText = playlists.map((text) => text.replace(/^#EXTM3U[^\\n]*\\n?/i, "")).join("\\n");
-    const catalog = parseM3u("#EXTM3U\\n" + mergedText, loadedSources.join(" + "));
+    const mergedText = playlists.map((text) => text.replace(/^#EXTM3U[^\n]*\n?/i, "")).join("\n");
+    const catalog = parseM3u("#EXTM3U\n" + mergedText, loadedSources.join(" + "));
     if (catalog.channels.length > 0) return catalog;
   }
 
