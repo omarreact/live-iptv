@@ -10,6 +10,21 @@ const CURATED_FREE_PLAYLISTS = [
   "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
   "https://raw.githubusercontent.com/freecasthub/public-iptv/main/playlist.m3u",
 ] as const;
+
+function parseProviderUrls(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter((item) => /^https?:\/\//i.test(item));
+}
+
+function configuredLocalProviders(countryCode: string): string[] {
+  const key = "IPTV_LOCAL_PLAYLIST_URLS_" + countryCode;
+  const countrySpecific = parseProviderUrls(process.env[key]);
+  const shared = parseProviderUrls(process.env.IPTV_LOCAL_PLAYLIST_URLS);
+  return [...new Set([...countrySpecific, ...shared])];
+}
 const CACHE_MS = 5 * 60_000;
 
 let memory: { expiresAt: number; catalog: Catalog } | null = null;
@@ -87,7 +102,13 @@ function mergeLocalCatalogs(
 
 async function buildLocalCatalog(countryCode: string): Promise<Catalog> {
   const countryPlaylist = `https://iptv-org.github.io/iptv/countries/${countryCode.toLowerCase()}.m3u`;
+  const configuredProviders = configuredLocalProviders(countryCode);
   const sources = [
+    ...configuredProviders.map((url, index) => ({
+      url,
+      priority: 120 - index * 5,
+      forceCountry: countryCode,
+    })),
     ...CURATED_FREE_PLAYLISTS.map((url, index) => ({
       url,
       priority: 60 - index * 10,
@@ -213,7 +234,14 @@ export function toPublicChannel(channel: Channel): PublicChannel {
   };
 }
 
-export async function getChannel(channelId: string): Promise<Channel | null> {
+export async function getChannel(channelId: string, countryCode?: string | null): Promise<Channel | null> {
+  const normalizedCountry = countryCode?.trim().toUpperCase() || "";
+  if (/^[A-Z]{2}$/.test(normalizedCountry)) {
+    const localCatalog = await getLocalCatalog(normalizedCountry);
+    const localChannel = localCatalog.channels.find((channel) => channel.id === channelId);
+    if (localChannel) return localChannel;
+  }
+
   const catalog = await getCatalog();
   return catalog.channels.find((channel) => channel.id === channelId) || null;
 }
