@@ -17,7 +17,7 @@ async function downloadPlaylist(url: string): Promise<string> {
       accept: "application/vnd.apple.mpegurl, audio/x-mpegurl, text/plain;q=0.9, */*;q=0.5",
       "user-agent": "Live-IPTV/1.0",
     },
-    next: { revalidate: 300 },
+    cache: "no-store",
     signal: AbortSignal.timeout(15000),
   });
   if (!response.ok) throw new Error("Playlist fetch failed with HTTP " + String(response.status));
