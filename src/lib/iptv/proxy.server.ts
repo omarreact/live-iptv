@@ -103,6 +103,7 @@ function rewritePlaylist(
   requestUrl: URL,
   channelId: string,
   sourceIndex: number,
+  countryCode: string | null,
 ): string {
   const toProxy = (raw: string): string => {
     try {
@@ -113,6 +114,7 @@ function rewritePlaylist(
         source: String(sourceIndex),
         u: child.href,
       });
+      if (countryCode) params.set("country", countryCode);
       return requestUrl.origin + "/api/stream?" + params.toString();
     } catch {
       return raw;
@@ -136,12 +138,14 @@ export async function proxyCatalogStream(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);
   const channelId = requestUrl.searchParams.get("channel")?.trim() || "";
   const sourceIndex = Number(requestUrl.searchParams.get("source") || "0");
+  const rawCountry = requestUrl.searchParams.get("country")?.trim().toUpperCase() || "";
+  const countryCode = /^[A-Z]{2}$/.test(rawCountry) ? rawCountry : null;
 
   if (!channelId || channelId.length > 180 || !Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex > 20) {
     return new Response("Invalid stream request", { status: 400 });
   }
 
-  const channel = await getChannel(channelId);
+  const channel = await getChannel(channelId, countryCode);
   const source = channel?.sources[sourceIndex];
   if (!channel || !source) return new Response("Stream source not found", { status: 404 });
 
@@ -181,7 +185,7 @@ export async function proxyCatalogStream(request: Request): Promise<Response> {
   if (looksLikePlaylist(finalUrl, contentType)) {
     const text = await response.text();
     return new Response(
-      rewritePlaylist(text, finalUrl, rootUrl, requestUrl, channelId, sourceIndex),
+      rewritePlaylist(text, finalUrl, rootUrl, requestUrl, channelId, sourceIndex, countryCode),
       {
         status: 200,
         headers: {

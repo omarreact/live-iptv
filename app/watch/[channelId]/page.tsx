@@ -2,21 +2,27 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChannelCard } from "@/components/channel-card";
 import { Player } from "@/components/player";
-import { getCatalog, getChannel, toPublicChannel } from "@/lib/iptv/catalog.server";
+import { getCatalog, getChannel, getLocalCatalog, toPublicChannel } from "@/lib/iptv/catalog.server";
 
 export const dynamic = "force-dynamic";
 
 export default async function WatchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ channelId: string }>;
+  searchParams: Promise<{ country?: string | string[] }>;
 }) {
-  const { channelId } = await params;
-  const channel = await getChannel(channelId);
+  const [{ channelId }, query] = await Promise.all([params, searchParams]);
+  const rawCountry = Array.isArray(query.country) ? query.country[0] : query.country;
+  const country = rawCountry?.trim().toUpperCase();
+  const localCountry = country && /^[A-Z]{2}$/.test(country) ? country : null;
+
+  const channel = await getChannel(channelId, localCountry);
   if (!channel) notFound();
 
   const publicChannel = toPublicChannel(channel);
-  const catalog = await getCatalog();
+  const catalog = localCountry ? await getLocalCatalog(localCountry) : await getCatalog();
   const related = catalog.channels
     .filter((item) => item.id !== channel.id && item.category === channel.category)
     .slice(0, 8)
@@ -42,7 +48,12 @@ export default async function WatchPage({
             </p>
           </div>
         </div>
-        <Player channelId={channel.id} name={channel.name} sourceKinds={publicChannel.sourceKinds} />
+        <Player
+          channelId={channel.id}
+          name={channel.name}
+          sourceKinds={publicChannel.sourceKinds}
+          country={localCountry}
+        />
         <div className="watch-note">
           If one source stops responding, the player moves to the next source automatically.
         </div>
@@ -51,7 +62,13 @@ export default async function WatchPage({
       <aside className="watch-sidebar">
         <div className="section-heading compact"><div><span className="eyebrow">MORE LIVE</span><h2>{channel.category}</h2></div></div>
         <div className="sidebar-grid">
-          {related.map((item) => <ChannelCard key={item.id} channel={item} />)}
+          {related.map((item) => (
+            <ChannelCard
+              key={item.id}
+              channel={item}
+              watchCountry={localCountry}
+            />
+          ))}
         </div>
       </aside>
     </section>

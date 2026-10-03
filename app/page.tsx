@@ -70,7 +70,13 @@ export default async function HomePage() {
             <span>{visitorCountry}</span>
           </div>
           <div className="channel-grid">
-            {localChannels.map((channel) => <ChannelCard key={channel.id} channel={channel} />)}
+            {localChannels.map((channel) => (
+              <ChannelCard
+                key={channel.id}
+                channel={channel}
+                watchCountry={visitorCountry}
+              />
+            ))}
           </div>
         </section>
       ) : null}

@@ -9,10 +9,12 @@ export function Player({
   channelId,
   name,
   sourceKinds,
+  country,
 }: {
   channelId: string;
   name: string;
   sourceKinds: SourceKind[];
+  country?: string | null;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const engineRef = useRef<Destroyable | null>(null);
@@ -60,11 +62,12 @@ export function Player({
       }
     };
 
-    const src =
-      "/api/stream?channel=" +
-      encodeURIComponent(channelId) +
-      "&source=" +
-      String(sourceIndex);
+    const streamParams = new URLSearchParams({
+      channel: channelId,
+      source: String(sourceIndex),
+    });
+    if (country) streamParams.set("country", country);
+    const src = "/api/stream?" + streamParams.toString();
     const kind = sourceKinds[sourceIndex] ?? "hls";
 
     const armWatchdog = () => {
@@ -183,7 +186,7 @@ export function Player({
       video.removeEventListener("error", onError);
       cleanupEngine();
     };
-  }, [channelId, retry, sourceIndex, sourceKinds]);
+  }, [channelId, country, retry, sourceIndex, sourceKinds]);
 
   const toggleFullscreen = async () => {
     const el = videoRef.current?.parentElement;
