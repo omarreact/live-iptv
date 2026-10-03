@@ -1,6 +1,5 @@
 import type { Catalog, Channel, SourceKind, StreamSource } from "./types";
 
-const MAX_CHANNELS = 1800;
 const MAX_SOURCES_PER_CHANNEL = 8;
 
 function safeUrl(raw: string): URL | null {
