@@ -62,7 +62,7 @@ function normalizeCategory(group: string, name: string): string {
   if (text.includes("bangla") || text.includes("bengali")) return "Bangla";
   if (text.includes("news")) return "News";
   if (text.includes("sport")) return "Sports";
-  if (text.includes("movie") || text.includes("cinema")) return "Movies";
+  if (text.includes("movie") || text.includes("cinema")) return "Entertainment";
   if (text.includes("hindi")) return "Hindi";
   if (text.includes("kid") || text.includes("cartoon")) return "Kids";
   if (text.includes("music")) return "Music";
@@ -146,7 +146,7 @@ export function parseM3u(text: string, source: string): Catalog {
       if (!existing.logo && pending.logo) existing.logo = pending.logo;
       if (!existing.country && pending.country) existing.country = pending.country;
       if (existing.category === "Other" && category !== "Other") existing.category = category;
-    } else if (merged.size < MAX_CHANNELS) {
+    } else {
       merged.set(key, {
         id: slugBase(pending.name) + "-" + hash32(key),
         name: pending.name,
