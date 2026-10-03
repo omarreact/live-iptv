@@ -2,7 +2,9 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { ChannelCard } from "@/components/channel-card";
 import { LiveGames } from "@/components/live-games";
+import { OfficialChannelCard } from "@/components/official-channel-card";
 import { getCatalog, getLocalCatalog, toPublicChannel } from "@/lib/iptv/catalog.server";
+import { getOfficialLocalChannels } from "@/lib/iptv/official-local";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,7 @@ export default async function HomePage() {
     visitorCountry?.length === 2 ? getLocalCatalog(visitorCountry) : Promise.resolve(null),
   ]);
   const publicChannels = catalog.channels.map(toPublicChannel);
+  const officialLocalChannels = visitorCountry ? getOfficialLocalChannels(visitorCountry) : [];
   const localSourceChannels = localCatalog?.channels.length
     ? localCatalog.channels.map(toPublicChannel)
     : publicChannels.filter((channel) => channel.country === visitorCountry);
@@ -63,7 +66,17 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {localChannels.length ? (
+      {officialLocalChannels.length ? (
+        <section className="section">
+          <div className="section-heading">
+            <div><span className="eyebrow">NEAR YOU · OFFICIAL SOURCES</span><h2>Local TV</h2></div>
+            <span>{visitorCountry}</span>
+          </div>
+          <div className="channel-grid">
+            {officialLocalChannels.map((channel) => <OfficialChannelCard key={channel.id} channel={channel} />)}
+          </div>
+        </section>
+      ) : localChannels.length ? (
         <section className="section">
           <div className="section-heading">
             <div><span className="eyebrow">NEAR YOU · ALTERNATE SOURCES</span><h2>Local TV</h2></div>
@@ -93,7 +106,7 @@ export default async function HomePage() {
       {featuredCategories.map((category) => {
         const channels = localFirst(
           publicChannels.filter((channel) => channel.category === category.name),
-          visitorCountry,
+          officialLocalChannels.length ? null : visitorCountry,
         ).slice(0, 12);
         if (!channels.length) return null;
         return (
