@@ -51,7 +51,13 @@ function cleanName(value: string): string {
     .trim();
 }
 
-function inferCountry(original: string): string | null {
+function inferCountry(original: string, metadata = ""): string | null {
+  const metadataCountry = metadata
+    .split(/[;,]/)
+    .map((value) => value.trim().toUpperCase())
+    .find((value) => /^[A-Z]{2,3}$/.test(value));
+  if (metadataCountry) return metadataCountry;
+
   const match = original.match(/\[([A-Z]{2,3})\]/i);
   return match ? match[1].toUpperCase() : null;
 }
@@ -114,7 +120,7 @@ export function parseM3u(text: string, source: string): Catalog {
         name: name.slice(0, 100),
         group: attrs["group-title"] || "",
         logo: logoUrl?.protocol === "https:" ? logoUrl.href.slice(0, 1000) : "",
-        country: inferCountry(originalName),
+        country: inferCountry(originalName, attrs["tvg-country"] || attrs["country"] || ""),
       };
       continue;
     }
