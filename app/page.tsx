@@ -2,7 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { ChannelCard } from "@/components/channel-card";
 import { LiveGames } from "@/components/live-games";
-import { getCatalog, toPublicChannel } from "@/lib/iptv/catalog.server";
+import { getCatalog, getLocalCatalog, toPublicChannel } from "@/lib/iptv/catalog.server";
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +29,17 @@ function localFirst<T extends { country: string | null }>(items: T[], countryCod
 }
 
 export default async function HomePage() {
-  const [catalog, requestHeaders] = await Promise.all([getCatalog(), headers()]);
+  const requestHeaders = await headers();
   const visitorCountry = getVisitorCountryCode(requestHeaders);
+  const [catalog, localCatalog] = await Promise.all([
+    getCatalog(),
+    visitorCountry?.length === 2 ? getLocalCatalog(visitorCountry) : Promise.resolve(null),
+  ]);
   const publicChannels = catalog.channels.map(toPublicChannel);
-  const localChannels = visitorCountry
-    ? publicChannels.filter((channel) => channel.country === visitorCountry).slice(0, 18)
-    : [];
+  const localSourceChannels = localCatalog?.channels.length
+    ? localCatalog.channels.map(toPublicChannel)
+    : publicChannels.filter((channel) => channel.country === visitorCountry);
+  const localChannels = localSourceChannels.slice(0, 18);
   const featuredCategories = catalog.categories.slice(0, 8);
   const sourceCount = publicChannels.reduce((sum, channel) => sum + channel.sourceCount, 0);
 
@@ -61,7 +66,7 @@ export default async function HomePage() {
       {localChannels.length ? (
         <section className="section">
           <div className="section-heading">
-            <div><span className="eyebrow">NEAR YOU</span><h2>Local TV</h2></div>
+            <div><span className="eyebrow">NEAR YOU · ALTERNATE SOURCES</span><h2>Local TV</h2></div>
             <span>{visitorCountry}</span>
           </div>
           <div className="channel-grid">
