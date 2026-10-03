@@ -20,6 +20,8 @@ export function Player({
   const [retry, setRetry] = useState(0);
   const [status, setStatus] = useState("Connecting…");
   const [failed, setFailed] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -173,7 +175,10 @@ export function Player({
 
     void attach();
 
-    return () => {
+    const toggleFullscreen = async () => { const el = videoRef.current?.parentElement; if (!el) return; if (document.fullscreenElement) await document.exitFullscreen(); else await el.requestFullscreen(); };
+  const togglePip = async () => { const video=videoRef.current; if(!video || !document.pictureInPictureEnabled) return; if(document.pictureInPictureElement) await document.exitPictureInPicture(); else await video.requestPictureInPicture(); };
+
+  return () => {
       cancelled = true;
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
@@ -186,7 +191,8 @@ export function Player({
   return (
     <section className="player-shell" aria-label={name + " player"}>
       <div className="player-stage">
-        <video ref={videoRef} controls playsInline autoPlay preload="metadata" />
+        <video ref={videoRef} controls playsInline autoPlay preload="metadata" muted={muted} onVolumeChange={(e)=>setVolume(e.currentTarget.volume)} />
+        {status !== "Live" && !status.startsWith("Live ·") ? <div className="player-loader"><span className="mini-spinner"/><b>{status}</b></div> : null}
         <div className="player-status" aria-live="polite">
           <span className={failed ? "status-dot status-error" : "status-dot"} />
           {status}
@@ -197,6 +203,10 @@ export function Player({
           Source {Math.min(sourceIndex + 1, Math.max(1, sourceKinds.length))} of {sourceKinds.length}
         </span>
         <div className="player-actions">
+          <button type="button" onClick={()=>{const v=videoRef.current;if(v){v.muted=!v.muted;setMuted(v.muted)}}}>{muted ? "Unmute" : "Mute"}</button>
+          <label className="volume-control" title="Volume"><span>VOL</span><input aria-label="Volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(e)=>{const v=videoRef.current;const n=Number(e.target.value);setVolume(n);if(v){v.volume=n;v.muted=n===0;setMuted(v.muted)}}}/></label>
+          <button type="button" onClick={()=>void togglePip()}>PiP</button>
+          <button type="button" onClick={()=>void toggleFullscreen()}>Fullscreen</button>
           {sourceIndex + 1 < sourceKinds.length ? (
             <button type="button" onClick={() => setSourceIndex((value) => value + 1)}>
               Try next source
