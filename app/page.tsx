@@ -1,13 +1,40 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { ChannelCard } from "@/components/channel-card";
 import { LiveGames } from "@/components/live-games";
 import { getCatalog, toPublicChannel } from "@/lib/iptv/catalog.server";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
+
+const COUNTRY_HEADERS = [
+  "cf-ipcountry",
+  "x-vercel-ip-country",
+  "x-country-code",
+  "cloudfront-viewer-country",
+] as const;
+
+function getVisitorCountryCode(requestHeaders: Headers): string | null {
+  for (const header of COUNTRY_HEADERS) {
+    const value = requestHeaders.get(header)?.trim().toUpperCase();
+    if (value && /^[A-Z]{2,3}$/.test(value) && value !== "XX") return value;
+  }
+  return null;
+}
+
+function localFirst<T extends { country: string | null }>(items: T[], countryCode: string | null): T[] {
+  if (!countryCode) return items;
+  return [...items].sort(
+    (a, b) => Number(b.country === countryCode) - Number(a.country === countryCode),
+  );
+}
 
 export default async function HomePage() {
-  const catalog = await getCatalog();
+  const [catalog, requestHeaders] = await Promise.all([getCatalog(), headers()]);
+  const visitorCountry = getVisitorCountryCode(requestHeaders);
   const publicChannels = catalog.channels.map(toPublicChannel);
+  const localChannels = visitorCountry
+    ? publicChannels.filter((channel) => channel.country === visitorCountry).slice(0, 18)
+    : [];
   const featuredCategories = catalog.categories.slice(0, 8);
   const sourceCount = publicChannels.reduce((sum, channel) => sum + channel.sourceCount, 0);
 
@@ -31,6 +58,18 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {localChannels.length ? (
+        <section className="section">
+          <div className="section-heading">
+            <div><span className="eyebrow">NEAR YOU</span><h2>Local TV</h2></div>
+            <span>{visitorCountry}</span>
+          </div>
+          <div className="channel-grid">
+            {localChannels.map((channel) => <ChannelCard key={channel.id} channel={channel} />)}
+          </div>
+        </section>
+      ) : null}
+
       <LiveGames />
 
       <section className="section category-strip-section">
@@ -47,7 +86,10 @@ export default async function HomePage() {
       </section>
 
       {featuredCategories.map((category) => {
-        const channels = publicChannels.filter((channel) => channel.category === category.name).slice(0, 12);
+        const channels = localFirst(
+          publicChannels.filter((channel) => channel.category === category.name),
+          visitorCountry,
+        ).slice(0, 12);
         if (!channels.length) return null;
         return (
           <section className="section" key={category.slug}>
