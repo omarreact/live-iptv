@@ -2,9 +2,9 @@ import { parseM3u, categorySlug } from "./m3u";
 import type { Catalog, Channel, PublicChannel } from "./types";
 
 const DEFAULT_PLAYLIST =
-  "https://gist.githubusercontent.com/Syed-Bipul-Rahman/09a05c101a5a1610e7bcd70c9b0e5c07/raw/test-iptv.m3u";
+  "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8";
 const PINNED_FALLBACK =
-  "https://gist.githubusercontent.com/Syed-Bipul-Rahman/09a05c101a5a1610e7bcd70c9b0e5c07/raw/7d95bf13463c313ecdb090ad6d05851e834cce7b/test-iptv.m3u";
+  "https://raw.githubusercontent.com/freecasthub/public-iptv/main/playlist.m3u";
 const PUBLIC_PLAYLIST = "https://iptv-org.github.io/iptv/index.m3u";
 const CURATED_FREE_PLAYLISTS = [
   "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
@@ -178,18 +178,21 @@ async function buildCatalog(): Promise<Catalog> {
   const publicPlaylist = process.env.IPTV_PUBLIC_PLAYLIST_URL?.trim() || PUBLIC_PLAYLIST;
   const candidates = [...new Set([primary, fallback, publicPlaylist])];
 
+  const results = await Promise.allSettled(
+    candidates.map(async (url) => ({ url, text: await downloadPlaylist(url) })),
+  );
+
   const playlists: string[] = [];
   const loadedSources: string[] = [];
   let lastError: unknown = null;
 
-  for (const url of candidates) {
-    try {
-      const text = await downloadPlaylist(url);
-      playlists.push(text);
-      loadedSources.push(url);
-    } catch (error) {
-      lastError = error;
-      console.warn("Unable to load IPTV playlist", url, error);
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      playlists.push(result.value.text);
+      loadedSources.push(result.value.url);
+    } else {
+      lastError = result.reason;
+      console.warn("Unable to load IPTV playlist", result.reason);
     }
   }
 

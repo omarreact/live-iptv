@@ -1,9 +1,24 @@
+import { randomUUID } from "node:crypto";
 import { getChannel } from "./catalog.server";
 
 const MAX_REDIRECTS = 5;
-const MAX_CHILD_URL = 4096;
+const CHILD_TOKEN_TTL_MS = 10 * 60_000;
+const MAX_CHILD_TOKENS = 20_000;
 const DEFAULT_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36";
+
+type StreamContext = {
+  channelId: string;
+  sourceIndex: number;
+  countryCode: string | null;
+};
+
+type ChildToken = StreamContext & {
+  url: string;
+  expiresAt: number;
+};
+
+const childTokens = new Map<string, ChildToken>();
 
 function isPrivateHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
@@ -42,10 +57,38 @@ function assertPublicHttpUrl(raw: string): URL {
   return url;
 }
 
-function proxyScopeAllows(root: URL, child: URL): boolean {
-  const rootHost = root.hostname.toLowerCase();
-  const childHost = child.hostname.toLowerCase();
-  return childHost === rootHost || childHost.endsWith("." + rootHost);
+function pruneChildTokens(): void {
+  const now = Date.now();
+  for (const [token, value] of childTokens) {
+    if (value.expiresAt <= now) childTokens.delete(token);
+  }
+
+  if (childTokens.size <= MAX_CHILD_TOKENS) return;
+  for (const token of childTokens.keys()) {
+    childTokens.delete(token);
+    if (childTokens.size <= Math.floor(MAX_CHILD_TOKENS * 0.9)) break;
+  }
+}
+
+function issueChildToken(url: URL, context: StreamContext): string {
+  if (childTokens.size >= MAX_CHILD_TOKENS) pruneChildTokens();
+  const token = randomUUID();
+  childTokens.set(token, {
+    ...context,
+    url: url.href,
+    expiresAt: Date.now() + CHILD_TOKEN_TTL_MS,
+  });
+  return token;
+}
+
+function resolveChildToken(token: string): ChildToken | null {
+  const value = childTokens.get(token);
+  if (!value) return null;
+  if (value.expiresAt <= Date.now()) {
+    childTokens.delete(token);
+    return null;
+  }
+  return value;
 }
 
 async function fetchUpstream(target: URL, request: Request): Promise<{ response: Response; finalUrl: URL }> {
@@ -99,23 +142,14 @@ function passthroughHeaders(response: Response): Headers {
 function rewritePlaylist(
   text: string,
   finalUrl: URL,
-  rootUrl: URL,
   requestUrl: URL,
-  channelId: string,
-  sourceIndex: number,
-  countryCode: string | null,
+  context: StreamContext,
 ): string {
   const toProxy = (raw: string): string => {
     try {
       const child = assertPublicHttpUrl(new URL(raw, finalUrl).href);
-      if (!proxyScopeAllows(rootUrl, child)) return child.href;
-      const params = new URLSearchParams({
-        channel: channelId,
-        source: String(sourceIndex),
-        u: child.href,
-      });
-      if (countryCode) params.set("country", countryCode);
-      return requestUrl.origin + "/api/stream?" + params.toString();
+      const token = issueChildToken(child, context);
+      return requestUrl.origin + "/api/stream?t=" + encodeURIComponent(token);
     } catch {
       return raw;
     }
@@ -136,31 +170,56 @@ function rewritePlaylist(
 
 export async function proxyCatalogStream(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);
-  const channelId = requestUrl.searchParams.get("channel")?.trim() || "";
-  const sourceIndex = Number(requestUrl.searchParams.get("source") || "0");
-  const rawCountry = requestUrl.searchParams.get("country")?.trim().toUpperCase() || "";
-  const countryCode = /^[A-Z]{2}$/.test(rawCountry) ? rawCountry : null;
+  const childToken = requestUrl.searchParams.get("t")?.trim() || "";
 
-  if (!channelId || channelId.length > 180 || !Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex > 20) {
-    return new Response("Invalid stream request", { status: 400 });
-  }
-
-  const channel = await getChannel(channelId, countryCode);
-  const source = channel?.sources[sourceIndex];
-  if (!channel || !source) return new Response("Stream source not found", { status: 404 });
-
-  let rootUrl: URL;
+  let context: StreamContext;
   let target: URL;
-  try {
-    rootUrl = assertPublicHttpUrl(source.url);
-    const childRaw = requestUrl.searchParams.get("u");
-    if (childRaw && childRaw.length > MAX_CHILD_URL) return new Response("URL too long", { status: 414 });
-    target = childRaw ? assertPublicHttpUrl(childRaw) : rootUrl;
-    if (childRaw && !proxyScopeAllows(rootUrl, target)) {
-      return new Response("Child stream is outside the source scope", { status: 403 });
+
+  if (childToken) {
+    const child = resolveChildToken(childToken);
+    if (!child) {
+      return new Response("Expired or invalid stream token", {
+        status: 403,
+        headers: { "cache-control": "no-store" },
+      });
     }
-  } catch {
-    return new Response("Invalid upstream", { status: 403 });
+
+    context = {
+      channelId: child.channelId,
+      sourceIndex: child.sourceIndex,
+      countryCode: child.countryCode,
+    };
+
+    try {
+      target = assertPublicHttpUrl(child.url);
+    } catch {
+      return new Response("Invalid upstream", { status: 403 });
+    }
+  } else {
+    const channelId = requestUrl.searchParams.get("channel")?.trim() || "";
+    const sourceIndex = Number(requestUrl.searchParams.get("source") || "0");
+    const rawCountry = requestUrl.searchParams.get("country")?.trim().toUpperCase() || "";
+    const countryCode = /^[A-Z]{2}$/.test(rawCountry) ? rawCountry : null;
+
+    if (!channelId || channelId.length > 180 || !Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex > 20) {
+      return new Response("Invalid stream request", { status: 400 });
+    }
+
+    if (requestUrl.searchParams.has("u")) {
+      return new Response("Direct child URLs are not accepted", { status: 403 });
+    }
+
+    const channel = await getChannel(channelId, countryCode);
+    const source = channel?.sources[sourceIndex];
+    if (!channel || !source) return new Response("Stream source not found", { status: 404 });
+
+    context = { channelId, sourceIndex, countryCode };
+
+    try {
+      target = assertPublicHttpUrl(source.url);
+    } catch {
+      return new Response("Invalid upstream", { status: 403 });
+    }
   }
 
   let upstreamResult: { response: Response; finalUrl: URL };
@@ -184,17 +243,14 @@ export async function proxyCatalogStream(request: Request): Promise<Response> {
   const contentType = response.headers.get("content-type") || "";
   if (looksLikePlaylist(finalUrl, contentType)) {
     const text = await response.text();
-    return new Response(
-      rewritePlaylist(text, finalUrl, rootUrl, requestUrl, channelId, sourceIndex, countryCode),
-      {
-        status: 200,
-        headers: {
-          "content-type": "application/vnd.apple.mpegurl",
-          "cache-control": "no-store",
-          "x-content-type-options": "nosniff",
-        },
+    return new Response(rewritePlaylist(text, finalUrl, requestUrl, context), {
+      status: 200,
+      headers: {
+        "content-type": "application/vnd.apple.mpegurl",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
       },
-    );
+    });
   }
 
   return new Response(response.body, {
