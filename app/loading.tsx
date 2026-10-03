@@ -1,8 +1,1 @@
-export default function Loading() {
-  return (
-    <div className="loading-shell">
-      <div className="loading-spinner" />
-      <p>Loading live channels…</p>
-    </div>
-  );
-}
+export default function Loading(){return <div className="pinflix-loader" role="status"><div className="loader-orbit"><span className="loader-play">▶</span><i/><i/><i/></div><strong>PINFLIX <em>TV</em></strong><p>Tuning live channels…</p><div className="loader-bar"><span/></div></div>}
