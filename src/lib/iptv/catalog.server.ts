@@ -5,7 +5,8 @@ const DEFAULT_PLAYLIST =
   "https://gist.githubusercontent.com/Syed-Bipul-Rahman/09a05c101a5a1610e7bcd70c9b0e5c07/raw/test-iptv.m3u";
 const PINNED_FALLBACK =
   "https://gist.githubusercontent.com/Syed-Bipul-Rahman/09a05c101a5a1610e7bcd70c9b0e5c07/raw/7d95bf13463c313ecdb090ad6d05851e834cce7b/test-iptv.m3u";
-const PUBLIC_PLAYLIST = "https://iptv-org.github.io/iptv/index.m3u";\nconst CACHE_MS = 5 * 60_000;
+const PUBLIC_PLAYLIST = "https://iptv-org.github.io/iptv/index.m3u";
+const CACHE_MS = 5 * 60_000;
 
 let memory: { expiresAt: number; catalog: Catalog } | null = null;
 let inflight: Promise<Catalog> | null = null;
