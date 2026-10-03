@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChannelCard } from "@/components/channel-card";
+import { LiveGames } from "@/components/live-games";
 import { getCatalog, toPublicChannel } from "@/lib/iptv/catalog.server";
 
 export const revalidate = 300;
@@ -29,6 +30,8 @@ export default async function HomePage() {
           <div><strong>{sourceCount}</strong><span>stream sources</span></div>
         </div>
       </section>
+
+      <LiveGames />
 
       <section className="section category-strip-section">
         <div className="section-heading">
