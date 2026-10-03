@@ -175,10 +175,7 @@ export function Player({
 
     void attach();
 
-    const toggleFullscreen = async () => { const el = videoRef.current?.parentElement; if (!el) return; if (document.fullscreenElement) await document.exitFullscreen(); else await el.requestFullscreen(); };
-  const togglePip = async () => { const video=videoRef.current; if(!video || !document.pictureInPictureEnabled) return; if(document.pictureInPictureElement) await document.exitPictureInPicture(); else await video.requestPictureInPicture(); };
-
-  return () => {
+    return () => {
       cancelled = true;
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
@@ -187,6 +184,20 @@ export function Player({
       cleanupEngine();
     };
   }, [channelId, retry, sourceIndex, sourceKinds]);
+
+  const toggleFullscreen = async () => {
+    const el = videoRef.current?.parentElement;
+    if (!el) return;
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await el.requestFullscreen();
+  };
+
+  const togglePip = async () => {
+    const video = videoRef.current;
+    if (!video || !document.pictureInPictureEnabled) return;
+    if (document.pictureInPictureElement) await document.exitPictureInPicture();
+    else await video.requestPictureInPicture();
+  };
 
   return (
     <section className="player-shell" aria-label={name + " player"}>
