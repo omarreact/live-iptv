@@ -1,3 +1,4 @@
+/* global URL, fetch, AbortSignal, console, process */
 // Read-only release gate: only the isolated Cloudflare Workers staging hostname.
 const origin = new URL("https://cf-migrate-iptv-stage.farukkhanone.workers.dev");
 const checks = [{ path: "/", kind: "html" }, { path: "/api/health", kind: "json" }];
