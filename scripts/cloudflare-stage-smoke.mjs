@@ -26,6 +26,18 @@ for (const { path, kind } of checks) {
     failures++;
   }
 }
+
+try {
+  const response = await fetch(new URL("/api/catalog", origin), { redirect: "manual", signal: AbortSignal.timeout(20000) });
+  const data = response.status === 200 ? await response.json() : null;
+  const pass = response.status === 200 && Array.isArray(data?.channels) && data.channels.length > 0 && Array.isArray(data.categories);
+  console.log(`${pass ? "PASS" : "FAIL"} /api/catalog: HTTP ${response.status}; channels=${data?.channels?.length ?? "missing"}`);
+  if (!pass) failures++;
+} catch (e) {
+  console.error(`FAIL /api/catalog: ${e instanceof Error ? e.message : String(e)}`);
+  failures++;
+}
+
 if (failures) {
   console.error(`Cloudflare staging gate failed (${failures} check(s)); do NOT attach a production domain.`);
   process.exitCode = 1;
